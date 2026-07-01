@@ -1,0 +1,217 @@
+/* =====================================================================
+   ROV 2026 — Dark Maritime Theme
+   Palette: navy #1a1a2e / panel #16213e / border #0f3460 / accent #e94560
+   ===================================================================== */
+
+/* ── Global ──────────────────────────────────────────────────────────── */
+QMainWindow,
+QWidget {
+    background-color: #1a1a2e;
+    color: #eaeaea;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 11px;
+}
+
+/* ── Generic Panel Frame ─────────────────────────────────────────────── */
+QFrame {
+    background-color: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 6px;
+}
+
+/* ── Panel Title Labels ───────────────────────────────────────────────── */
+QLabel#panelTitle {
+    background-color: #0f3460;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    padding: 4px 8px;
+    border-radius: 4px 4px 0px 0px;
+    border: none;
+}
+
+/* ── General Labels ──────────────────────────────────────────────────── */
+QLabel {
+    background-color: transparent;
+    color: #eaeaea;
+    border: none;
+}
+
+QLabel#dimLabel {
+    color: #7a8a99;
+    font-size: 9px;
+}
+
+/* ── Camera Panels ───────────────────────────────────────────────────── */
+QLabel#cameraFeed {
+    background-color: #0d1b2a;
+    color: #7a8a99;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    qproperty-alignment: AlignCenter;
+    font-size: 13px;
+}
+
+/* ── QR Result ───────────────────────────────────────────────────────── */
+QLabel#qrSide {
+    color: #e94560;
+    font-size: 28px;
+    font-weight: bold;
+    qproperty-alignment: AlignCenter;
+}
+
+QLabel#qrStatus {
+    font-size: 16px;
+    font-weight: bold;
+    qproperty-alignment: AlignCenter;
+}
+
+QLabel#qrStatusValid {
+    color: #4caf50;
+    font-size: 16px;
+    font-weight: bold;
+    qproperty-alignment: AlignCenter;
+}
+
+QLabel#qrStatusInvalid {
+    color: #f44336;
+    font-size: 16px;
+    font-weight: bold;
+    qproperty-alignment: AlignCenter;
+}
+
+QLabel#qrRawText {
+    color: #7a8a99;
+    font-family: "Consolas", monospace;
+    font-size: 10px;
+    qproperty-alignment: AlignCenter;
+}
+
+/* ── Altitude Gauge Labels ───────────────────────────────────────────── */
+QLabel#altValue {
+    color: #4caf50;
+    font-size: 28px;
+    font-weight: bold;
+    qproperty-alignment: AlignCenter;
+}
+
+QLabel#altUnit {
+    color: #7a8a99;
+    font-size: 12px;
+    qproperty-alignment: AlignCenter;
+}
+
+/* ── State Machine Badge ─────────────────────────────────────────────── */
+QLabel#stateBadge {
+    background-color: #0f3460;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 6px 14px;
+    border-radius: 4px;
+    qproperty-alignment: AlignCenter;
+}
+
+/* ── Footer Status Bar ───────────────────────────────────────────────── */
+QWidget#footerBar {
+    background-color: #0d1b2a;
+    border: none;
+    border-top: 1px solid #0f3460;
+    border-radius: 0px;
+}
+
+QLabel#footerItem {
+    color: #aaaaaa;
+    font-size: 10px;
+    padding: 0px 6px;
+}
+
+QLabel#footerSep {
+    color: #0f3460;
+    font-size: 14px;
+    padding: 0px 2px;
+}
+
+QLabel#ledOk {
+    background-color: #4caf50;
+    border-radius: 5px;
+    min-width:  10px;
+    max-width:  10px;
+    min-height: 10px;
+    max-height: 10px;
+}
+
+QLabel#ledWarn {
+    background-color: #ff9800;
+    border-radius: 5px;
+    min-width:  10px;
+    max-width:  10px;
+    min-height: 10px;
+    max-height: 10px;
+}
+
+QLabel#ledError {
+    background-color: #f44336;
+    border-radius: 5px;
+    min-width:  10px;
+    max-width:  10px;
+    min-height: 10px;
+    max-height: 10px;
+}
+
+QLabel#ledNeutral {
+    background-color: #607d8b;
+    border-radius: 5px;
+    min-width:  10px;
+    max-width:  10px;
+    min-height: 10px;
+    max-height: 10px;
+}
+
+/* ── Top Info Bar ────────────────────────────────────────────────────── */
+QWidget#topBar {
+    background-color: #0d1b2a;
+    border: none;
+    border-bottom: 1px solid #0f3460;
+    border-radius: 0px;
+}
+
+QLabel#topBarTeam {
+    color: #e94560;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 0px 8px;
+}
+
+QLabel#topBarUniversity {
+    color: #eaeaea;
+    font-size: 13px;
+    padding: 0px 8px;
+}
+
+QLabel#topBarDatetime {
+    color: #7a8a99;
+    font-family: "Consolas", monospace;
+    font-size: 12px;
+    padding: 0px 8px;
+}
+
+/* ── pyqtgraph PlotWidget ────────────────────────────────────────────── */
+PlotWidget {
+    background-color: #0d1b2a;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+}
+
+/* ── Scrollbars (minimal) ────────────────────────────────────────────── */
+QScrollBar:vertical {
+    background: #16213e;
+    width: 8px;
+}
+QScrollBar::handle:vertical {
+    background: #0f3460;
+    border-radius: 4px;
+}
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical { height: 0px; }

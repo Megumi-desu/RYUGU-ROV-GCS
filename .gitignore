@@ -1,0 +1,50 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Logs & recordings
+logs/
+*.log
+recordings/
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# PyQt5 compiled UI files (keep .ui source, ignore compiled)
+*_ui.py
+
+# Sensitive
+*.env
+config_local.py
+
+# AI Agent Configs & Remnants
+.agents/
+.claude/
+skills-lock.json
+
+# Test cache
+.pytest_cache/
+
+

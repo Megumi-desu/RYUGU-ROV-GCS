@@ -1,0 +1,10 @@
+PyQt5==5.15.10
+pyqtgraph==0.13.3
+opencv-python==4.9.0.80
+pymavlink==2.4.41
+transitions==0.9.0
+numpy==1.26.4
+pygame==2.5.2
+pytest>=7.0
+# pyzbar==0.1.9  # Skip for now — needs ZBar DLL on Windows
+# PyQt5-tools    # Qt Designer, install separately if needed
