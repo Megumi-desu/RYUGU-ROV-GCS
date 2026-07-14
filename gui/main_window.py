@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import datetime
 
 from PyQt5.QtWidgets import (
@@ -21,9 +22,13 @@ from utils.constants import (
     TEAM_NAME, UNIVERSITY_NAME, COMPETITION,
     COLOR_BG, COLOR_PANEL, COLOR_BORDER, COLOR_ACCENT,
     COLOR_TEXT, COLOR_TEXT_DIM,
+    COLOR_OK, COLOR_ERROR, COLOR_WARN,
     FONT_FAMILY,
     ASSET_LOGO_UB, ASSET_LOGO_KKI, ASSET_LOGO_TEAM
 )
+
+# Timeout threshold for downlink telemetry packets (seconds)
+_TELEM_TIMEOUT_S = 3.0
 
 
 def _load_qss(path: str) -> str:
@@ -44,13 +49,24 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._setup_window()
         self._apply_stylesheet()
-        self._build_ui()
-        self._start_clock()
 
         # Track arm state for UI feedback
         self._armed = False
         # Reference to ethernet worker (set via wire_ethernet)
         self._eth_worker = None
+
+        # Track previous connection state for status-log transitions
+        self._prev_connected: bool | None = None
+        # Track previous flight mode for status-log transitions
+        self._prev_mode: str | None = None
+
+        # Timestamps for last received telemetry packets (monotonic)
+        self._last_imu_time: float = 0.0
+        self._last_depth_time: float = 0.0
+        self._last_status_time: float = 0.0
+
+        self._build_ui()
+        self._start_clock()
 
     # ── Window setup ──────────────────────────────────────────────────
 
@@ -91,7 +107,10 @@ class MainWindow(QMainWindow):
         # Initial status
         self._footer.set_mode("MANUAL")
         self._footer.set_connection(False)
-        self._footer.set_sensor_status(False, "NO LINK")
+        self._footer.set_bar30_status(False, "NO LINK")
+        self._footer.set_battery_status(False, "NO LINK")
+        self._footer.set_gamepad_status(False, "NO LINK")
+        self._footer.set_imu_status(False, "NO LINK")
         self._footer.set_logging(False)
 
     def _build_top_bar(self) -> QWidget:
@@ -230,6 +249,21 @@ class MainWindow(QMainWindow):
         text = f"{day}  {now.strftime('%d %b %Y')}    {now.strftime('%H:%M:%S')}"
         self._clock_label.setText(text)
 
+        # ── Telemetry timeout checks ──────────────────────────────────
+        mono = time.monotonic()
+
+        if self._last_imu_time and (mono - self._last_imu_time) > _TELEM_TIMEOUT_S:
+            self._footer.set_imu_status(False, "OFFLINE")
+            self._last_imu_time = 0.0   # avoid repeated updates
+
+        if self._last_depth_time and (mono - self._last_depth_time) > _TELEM_TIMEOUT_S:
+            self._footer.set_bar30_status(False, "OFFLINE")
+            self._last_depth_time = 0.0
+
+        if self._last_status_time and (mono - self._last_status_time) > _TELEM_TIMEOUT_S:
+            self._footer.set_battery_status(False, "OFFLINE")
+            self._last_status_time = 0.0
+
     # ── Gamepad signal handlers ───────────────────────────────────────
 
     @pyqtSlot(dict)
@@ -252,8 +286,10 @@ class MainWindow(QMainWindow):
     def on_arm_event(self, armed: bool):
         """Handle ARM/DISARM from gamepad."""
         self._armed = armed
-        status_text = "ARMED" if armed else "DISARMED"
-        self._footer.set_sensor_status(armed, status_text)
+        if armed:
+            self.qr_panel.add_log("SYSTEM ARMED", COLOR_OK)
+        else:
+            self.qr_panel.add_log("SYSTEM DISARMED", COLOR_WARN)
 
         # Forward to Jetson
         if self._eth_worker is not None:
@@ -261,14 +297,20 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(str, bool)
     def on_button_event(self, action: str, pressed: bool):
-        """Handle button events from gamepad (gripper, ballast)."""
+        """Handle button events from gamepad (gripper, ballast).
+
+        Gripper uses one-shot trigger: only send on press, not on release.
+        Ballast retains hold-to-activate behaviour.
+        """
         if self._eth_worker is None:
             return
 
         if action == "gripper_open":
-            self._eth_worker.send_gripper(1 if pressed else 0)
+            if pressed:
+                self._eth_worker.send_gripper(1)   # OPEN
         elif action == "gripper_close":
-            self._eth_worker.send_gripper(2 if pressed else 0)
+            if pressed:
+                self._eth_worker.send_gripper(2)   # CLOSE
         elif action == "ballast_fill":
             self._eth_worker.send_ballast(1 if pressed else 0)
         elif action == "ballast_drain":
@@ -278,6 +320,11 @@ class MainWindow(QMainWindow):
     def on_mode_changed(self, mode: str):
         """Handle flight mode change from gamepad."""
         self._footer.set_mode(mode)
+
+        # Log mode transition to status log
+        if self._prev_mode != mode:
+            self._prev_mode = mode
+            self.qr_panel.add_log(f"MODE: {mode}", "#00BCD4")
 
         # Forward to Jetson
         if self._eth_worker is not None:
@@ -309,23 +356,40 @@ class MainWindow(QMainWindow):
         self._eth_worker = worker
 
         # Telemetry → panels
-        worker.depth_updated.connect(
-            lambda depth, alt: self.alt_panel.update_depth(depth)
-        )
+        worker.depth_updated.connect(self._on_depth_updated)
         worker.imu_updated.connect(self._on_imu_updated)
         worker.status_updated.connect(self._on_status_updated)
         worker.qr_detected.connect(self.qr_panel.update_qr)
 
-        # Connection status
-        worker.connection_changed.connect(self._footer.set_connection)
+        # Connection status → footer + status log
+        worker.connection_changed.connect(self._on_connection_changed)
 
         # ACK feedback
         worker.command_timeout.connect(self._on_command_timeout)
 
+    @pyqtSlot(bool)
+    def _on_connection_changed(self, connected: bool):
+        """Handle Jetson connection status change — update footer and log."""
+        self._footer.set_connection(connected)
+
+        # Log only on actual transitions
+        if self._prev_connected != connected:
+            self._prev_connected = connected
+            if connected:
+                self.qr_panel.add_log("JETSON: ONLINE", COLOR_OK)
+            else:
+                self.qr_panel.add_log("JETSON: OFFLINE", COLOR_ERROR)
+
     @pyqtSlot(float, float, float)
     def _on_imu_updated(self, pitch: float, roll: float, yaw: float):
-        """Handle IMU data from Ethernet — update ROV design panel."""
+        """Handle IMU data from Ethernet — update ROV design panel + footer."""
         self.rov_panel.update_state(f"P:{pitch:.0f}° R:{roll:.0f}° Y:{yaw:.0f}°")
+
+        # Mark IMU as alive
+        self._last_imu_time = time.monotonic()
+        self._footer.set_imu_status(
+            True, f"P:{pitch:.0f}° R:{roll:.0f}° Y:{yaw:.0f}°"
+        )
 
     @pyqtSlot(dict)
     def _on_status_updated(self, status: dict):
@@ -335,14 +399,26 @@ class MainWindow(QMainWindow):
         mode = status.get("mode", "MANUAL")
         self._armed = arm
         self._footer.set_mode(mode)
-        self._footer.set_sensor_status(True, f"BAT:{battery:.1f}V")
+
+        # Mark battery status as alive
+        self._last_status_time = time.monotonic()
+        self._footer.set_battery_status(True, f"{battery:.1f}V")
 
     @pyqtSlot(int)
     def _on_command_timeout(self, packet_id: int):
         """Handle critical command ACK timeout."""
-        self._footer.set_sensor_status(
+        # Show timeout on the battery indicator (status packet)
+        self._footer.set_battery_status(
             False, f"CMD TIMEOUT (0x{packet_id:02X})"
         )
+
+    # ── Depth packet handler (called via wire_ethernet lambda) ────────
+
+    def _on_depth_updated(self, depth: float, alt: float):
+        """Handle depth telemetry — update altitude panel + BAR30 indicator."""
+        self.alt_panel.update_depth(depth)
+        self._last_depth_time = time.monotonic()
+        self._footer.set_bar30_status(True, f"{depth:.2f}m")
 
     # ── Legacy wiring helpers (kept for compatibility) ────────────────
 

@@ -128,7 +128,7 @@ class QRResultPanel(QFrame):
         inner.addSpacing(4)
 
         # ── Scan log ──────────────────────────────────────────────────
-        log_header = QLabel("SCAN LOG")
+        log_header = QLabel("STATUS LOG")
         log_header.setObjectName("dimLabel")
         inner.addWidget(log_header)
 
@@ -223,6 +223,40 @@ class QRResultPanel(QFrame):
             self._estop_btn.setText("EMERGENCY\nSTOP")
             self._estop_btn.setStyleSheet(self._estop_style_idle())
 
+    # ── Generic status log ─────────────────────────────────────────────
+
+    def add_log(self, text: str, color: str):
+        """Append a generic timestamped entry to the status log.
+
+        Parameters
+        ----------
+        text : str
+            Short status message (e.g. ``"JETSON: ONLINE"``).
+        color : str
+            CSS colour string for the entry (e.g. ``"#4caf50"`` for green).
+        """
+        now_str = datetime.now().strftime("%H:%M:%S")
+        entry_text = f"[{now_str}] {text}"
+        self._log_entries.insert(0, (entry_text, color))
+        if len(self._log_entries) > 5:
+            self._log_entries.pop()
+        self._refresh_log_display()
+
+    def _refresh_log_display(self):
+        """Redraw the 5-line log label list from ``_log_entries``."""
+        for i, lbl in enumerate(self._log_labels):
+            if i < len(self._log_entries):
+                text, col = self._log_entries[i]
+                lbl.setText(text)
+                lbl.setStyleSheet(
+                    f"color: {col}; font-family: Consolas; font-size: 9px; border: none;"
+                )
+            else:
+                lbl.setText("—")
+                lbl.setStyleSheet(
+                    f"color: {COLOR_TEXT_DIM}; font-family: Consolas; font-size: 9px; border: none;"
+                )
+
     # ── Public update slots ───────────────────────────────────────────
 
     @pyqtSlot(str, bool, str)
@@ -259,23 +293,7 @@ class QRResultPanel(QFrame):
         # Prepend new entry to log (max 5)
         status_str = "OK" if valid else "NG"
         color = COLOR_OK if valid else COLOR_ERROR
-        entry_text = f"{now_str}  SIDE-{side}  {status_str}"
-        self._log_entries.insert(0, (entry_text, color))
-        if len(self._log_entries) > 5:
-            self._log_entries.pop()
-
-        for i, lbl in enumerate(self._log_labels):
-            if i < len(self._log_entries):
-                text, col = self._log_entries[i]
-                lbl.setText(text)
-                lbl.setStyleSheet(
-                    f"color: {col}; font-family: Consolas; font-size: 9px; border: none;"
-                )
-            else:
-                lbl.setText("—")
-                lbl.setStyleSheet(
-                    f"color: {COLOR_TEXT_DIM}; font-family: Consolas; font-size: 9px; border: none;"
-                )
+        self.add_log(f"QR SIDE-{side} {status_str}", color)
 
     def reset(self):
         self._side_value.setText("—")

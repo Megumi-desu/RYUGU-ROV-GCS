@@ -26,7 +26,7 @@ def _make_sep() -> QLabel:
 
 class FooterStatusBar(QWidget):
     """
-    Custom status bar: Mode | Connection | Sensor Status | Logging
+    Custom status bar: Mode | Connection | BAR30 | BATT | GAMEPAD | IMU | Logging
     Each section has a colored LED indicator + text label.
     """
 
@@ -62,15 +62,24 @@ class FooterStatusBar(QWidget):
         self._led_mode, self._lbl_mode = _item("ledNeutral", "MODE: MANUAL")
         # Connection
         self._led_conn, self._lbl_conn = _item("ledError", "CONNECTION: OFFLINE")
-        # Sensor
-        self._led_sens, self._lbl_sens = _item("ledNeutral", "SENSOR: UNKNOWN")
+        # BAR30 (Depth/Pressure)
+        self._led_bar30, self._lbl_bar30 = _item("ledNeutral", "BAR30: OFFLINE")
+        # BATT (Battery)
+        self._led_batt, self._lbl_batt = _item("ledNeutral", "BATT: OFFLINE")
+        # GAMEPAD (Logitech F310)
+        self._led_gamepad, self._lbl_gamepad = _item("ledNeutral", "GAMEPAD: OFFLINE")
+        # IMU (Orientation)
+        self._led_imu, self._lbl_imu = _item("ledNeutral", "IMU: OFFLINE")
         # Logging
         self._led_log,  self._lbl_log  = _item("ledNeutral", "LOG: IDLE")
 
         sections = [
             (self._led_mode, self._lbl_mode),
             (self._led_conn, self._lbl_conn),
-            (self._led_sens, self._lbl_sens),
+            (self._led_bar30, self._lbl_bar30),
+            (self._led_batt, self._lbl_batt),
+            (self._led_gamepad, self._lbl_gamepad),
+            (self._led_imu, self._lbl_imu),
             (self._led_log,  self._lbl_log),
         ]
         for i, (led, lbl) in enumerate(sections):
@@ -99,10 +108,29 @@ class FooterStatusBar(QWidget):
         self._lbl_conn.setText("CONNECTION: ONLINE" if connected else "CONNECTION: OFFLINE")
         self._set_led(self._led_conn, COLOR_OK if connected else COLOR_ERROR)
 
-    def set_sensor_status(self, ok: bool, detail: str = ""):
-        text = f"SENSOR: {detail}" if detail else ("SENSOR: OK" if ok else "SENSOR: FAULT")
-        self._lbl_sens.setText(text)
-        self._set_led(self._led_sens, COLOR_OK if ok else COLOR_ERROR)
+    def set_bar30_status(self, ok: bool, detail: str = ""):
+        """Update BAR30 depth/pressure sensor indicator."""
+        text = f"BAR30: {detail}" if detail else ("BAR30: OK" if ok else "BAR30: OFFLINE")
+        self._lbl_bar30.setText(text)
+        self._set_led(self._led_bar30, COLOR_OK if ok else COLOR_ERROR)
+
+    def set_battery_status(self, ok: bool, detail: str = ""):
+        """Update battery status indicator."""
+        text = f"BATT: {detail}" if detail else ("BATT: OK" if ok else "BATT: OFFLINE")
+        self._lbl_batt.setText(text)
+        self._set_led(self._led_batt, COLOR_OK if ok else COLOR_ERROR)
+
+    def set_gamepad_status(self, ok: bool, detail: str = ""):
+        """Update gamepad connection indicator."""
+        text = f"GAMEPAD: {detail}" if detail else ("GAMEPAD: OK" if ok else "GAMEPAD: OFFLINE")
+        self._lbl_gamepad.setText(text)
+        self._set_led(self._led_gamepad, COLOR_OK if ok else COLOR_ERROR)
+
+    def set_imu_status(self, ok: bool, detail: str = ""):
+        """Update IMU orientation sensor indicator."""
+        text = f"IMU: {detail}" if detail else ("IMU: OK" if ok else "IMU: OFFLINE")
+        self._lbl_imu.setText(text)
+        self._set_led(self._led_imu, COLOR_OK if ok else COLOR_ERROR)
 
     def set_logging(self, active: bool):
         self._lbl_log.setText("LOG: RECORDING" if active else "LOG: IDLE")

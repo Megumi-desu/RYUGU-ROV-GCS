@@ -77,13 +77,17 @@ def main():
     # Button events (gripper, ballast) → forward to Jetson
     gamepad.button_event.connect(window.on_button_event)
 
-    # Connection status → status bar
-    gamepad.connection_lost.connect(
-        lambda: window._footer.set_sensor_status(False, "GAMEPAD LOST")
-    )
-    gamepad.connection_restored.connect(
-        lambda: window._footer.set_sensor_status(True, "GAMEPAD OK")
-    )
+    # Connection status → GAMEPAD indicator + status log
+    def _on_gamepad_lost():
+        window._footer.set_gamepad_status(False, "LOST")
+        window.qr_panel.add_log("GAMEPAD: LOST", "#f44336")
+
+    def _on_gamepad_restored():
+        window._footer.set_gamepad_status(True, "OK")
+        window.qr_panel.add_log("GAMEPAD: OK", "#4caf50")
+
+    gamepad.connection_lost.connect(_on_gamepad_lost)
+    gamepad.connection_restored.connect(_on_gamepad_restored)
 
     # ── Wire Ethernet worker → MainWindow ─────────────────────────────
     window.wire_ethernet(eth_worker)

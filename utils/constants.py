@@ -70,8 +70,8 @@ CMD_PORT    = 5001    # UDP — uplink commands (GCS → Jetson)
 TELEM_PORT  = 5002    # UDP — downlink telemetry (Jetson → GCS)
 
 # ── Camera Streams ───────────────────────────────────────────────────────
-STREAM_URL_FRONT  = f"rtsp://{JETSON_IP}:8554/front"
-STREAM_URL_BOTTOM = f"rtsp://{JETSON_IP}:8554/bottom"
+STREAM_URL_FRONT  = f"http://{JETSON_IP}:8554/video"
+STREAM_URL_BOTTOM = f"http://{JETSON_IP}:8555/video"
 CAMERA_RECONNECT_S = 1.5  # seconds between reconnection attempts
 
 # ── Asset paths (relative to project root) ───────────────────────────────
