@@ -156,23 +156,15 @@ class EthernetWorker(QThread):
         self._cmd_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         try:
-            self._telem_sock.bind((self._gcs_ip, self._telem_port))
+            self._telem_sock.bind(("0.0.0.0", self._telem_port))
             logger.info(
-                "EthernetWorker: listening on %s:%d",
-                self._gcs_ip, self._telem_port,
+                "EthernetWorker: listening on 0.0.0.0:%d",
+                self._telem_port,
             )
         except OSError as e:
-            logger.error("EthernetWorker: failed to bind — %s", e)
-            # Try binding to any interface as fallback
-            try:
-                self._telem_sock.bind(("0.0.0.0", self._telem_port))
-                logger.warning(
-                    "EthernetWorker: bound to 0.0.0.0:%d (fallback)",
-                    self._telem_port,
-                )
-            except OSError as e2:
-                logger.error("EthernetWorker: bind fallback failed — %s", e2)
-                self._running = False
+            logger.error("EthernetWorker: failed to bind port %d — %s",
+                         self._telem_port, e)
+            self._running = False
 
         while self._running:
             # 1. Receive telemetry

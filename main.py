@@ -13,6 +13,15 @@ Requirements:
 import sys
 import os
 import ctypes
+import socket
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("GCS")
 
 # ── DPI fix — MUST be before QApplication ────────────────────────────────
 # Without this, Windows 11 DPI scaling breaks the layout at 125% / 150%.
@@ -41,12 +50,52 @@ from core.ethernet_worker import EthernetWorker
 from core.camera_stream_worker import CameraStreamWorker
 from utils.constants import (
     STREAM_URL_FRONT, STREAM_URL_BOTTOM,
+    GCS_IP, TELEM_PORT,
 )
+
+
+# ── Network verification ─────────────────────────────────────────────────
+
+def _check_network():
+    """Warn if the expected GCS static IP is not present on any interface."""
+    try:
+        # Enumerate all IPs bound to this host
+        hostname = socket.gethostname()
+        local_ips = {
+            addr[4][0]
+            for addr in socket.getaddrinfo(hostname, None, socket.AF_INET)
+        }
+        # Also include loopback / common detection via UDP trick
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))  # doesn't actually send data
+            local_ips.add(s.getsockname()[0])
+            s.close()
+        except OSError:
+            pass
+
+        if GCS_IP in local_ips:
+            logger.info(
+                "Network OK — GCS IP %s found on this machine.", GCS_IP
+            )
+        else:
+            logger.warning(
+                "GCS IP is not %s. Telemetry data might not be received! "
+                "Detected IPs: %s. "
+                "Please configure a static IP of %s on the Ethernet adapter "
+                "connected to the ROV.",
+                GCS_IP, ", ".join(sorted(local_ips)), GCS_IP,
+            )
+    except Exception as e:
+        logger.warning("Network check failed: %s", e)
 
 
 def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+
+    # ── Startup network check ─────────────────────────────────────────
+    _check_network()
 
     # ── Main window ───────────────────────────────────────────────────
     window = MainWindow()
