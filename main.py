@@ -123,7 +123,7 @@ def main():
     # ARM/DISARM → status bar + forward to Jetson
     gamepad.arm_event.connect(window.on_arm_event)
 
-    # Button events (gripper, ballast) → forward to Jetson
+    # Button events (gripper, speed mode) → forward to MainWindow
     gamepad.button_event.connect(window.on_button_event)
 
     # Connection status → GAMEPAD indicator + status log

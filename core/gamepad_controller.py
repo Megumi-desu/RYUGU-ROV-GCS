@@ -42,8 +42,8 @@ Runs in a separate QThread to avoid blocking the main GUI thread.
     ├──────────────────────┼──────────────────┼──────────────────┤
     │ Gripper OPEN         │ LT (Axis 4)      │ button_event     │
     │ Gripper CLOSE        │ RT (Axis 5)      │ button_event     │
-    │ Ballast FILL         │ LB (Button 4)    │ button_event     │
-    │ Ballast DRAIN        │ RB (Button 5)    │ button_event     │
+    │ Speed: SLOW (35%)    │ LB (Button 4)    │ button_event     │
+    │ Speed: FAST (100%)   │ RB (Button 5)    │ button_event     │
     │ ARM                  │ Start (1.5s)     │ arm_event        │
     │ DISARM               │ Back  (1.5s)     │ arm_event        │
     └──────────────────────┴──────────────────┴──────────────────┘
@@ -225,7 +225,7 @@ class GamepadController(QThread):
     button_event : str, bool
         ``(action_name, is_pressed)``.
         Actions: ``gripper_open``, ``gripper_close``,
-                 ``ballast_fill``, ``ballast_drain``.
+                 ``speed_slow``, ``speed_fast``.
     mode_changed : str
         One of: ``"MANUAL"``, ``"STABILIZE"``, ``"DEPTH HOLD"``,
         ``"AUTONOMOUS"`` — emitted on single button press.
@@ -421,7 +421,7 @@ class GamepadController(QThread):
         # ── Face buttons → Flight mode selection ──────────────────────────
         self._poll_mode_buttons()
 
-        # ── Bumper buttons → Ballast ──────────────────────────────────────
+        # ── Bumper buttons → Speed mode ────────────────────────────────────
         self._poll_bumper_buttons()
 
         # ── Triggers → Gripper (edge detection on analog axis) ────────────
@@ -455,16 +455,17 @@ class GamepadController(QThread):
                     self.mode_changed.emit(mode)
             self._prev_buttons[btn_idx] = pressed
 
-    # ── Bumper buttons (ballast) ───────────────────────────────────────────
+    # ── Bumper buttons (speed mode) ────────────────────────────────────────
 
     def _poll_bumper_buttons(self):
-        """LB (4) = ballast fill, RB (5) = ballast drain."""
-        for btn_idx, action in ((4, "ballast_fill"), (5, "ballast_drain")):
+        """LB (4) = speed slow (35%), RB (5) = speed fast (100%)."""
+        for btn_idx, action in ((4, "speed_slow"), (5, "speed_fast")):
             pressed = bool(self._joystick.get_button(btn_idx))
             prev = self._prev_buttons.get(btn_idx, False)
-            if pressed != prev:
-                self._prev_buttons[btn_idx] = pressed
-                self.button_event.emit(action, pressed)
+            if pressed and not prev:
+                # Rising edge only — single press to switch speed mode
+                self.button_event.emit(action, True)
+            self._prev_buttons[btn_idx] = pressed
 
     # ── Trigger-based gripper ──────────────────────────────────────────────
 

@@ -62,6 +62,14 @@ DPAD_RAMP_RATE     = 100     # units per second (in -1000..+1000 scale)
 DPAD_MAX_VALUE     = 1000    # accumulator cap
 TRIGGER_GRIP_THRESH = 0.5    # trigger axis threshold for gripper activation
 
+# ── Speed Modes (LB / RB) ───────────────────────────────────────────
+SPEED_MULT_FAST = 1.0        # 100% thrust — normal operations
+SPEED_MULT_SLOW = 0.35       # 35% thrust — precision / inspection
+
+# ── Simulated Depth (when Bar30 is not installed) ────────────────────
+USE_SIMULATED_DEPTH = True   # True = simulate via heave stick input
+DEPTH_SIM_SPEED     = 0.15   # metres per second at full stick deflection
+
 # ── Network (GCS ↔ Jetson Orin Nano) ─────────────────────────────────────
 GCS_IP      = "192.168.1.100"
 JETSON_IP   = "192.168.1.10"

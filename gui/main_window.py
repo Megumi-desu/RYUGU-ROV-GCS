@@ -24,7 +24,9 @@ from utils.constants import (
     COLOR_TEXT, COLOR_TEXT_DIM,
     COLOR_OK, COLOR_ERROR, COLOR_WARN,
     FONT_FAMILY,
-    ASSET_LOGO_UB, ASSET_LOGO_KKI, ASSET_LOGO_TEAM
+    ASSET_LOGO_UB, ASSET_LOGO_KKI, ASSET_LOGO_TEAM,
+    SPEED_MULT_FAST, SPEED_MULT_SLOW,
+    USE_SIMULATED_DEPTH, DEPTH_SIM_SPEED, POOL_DEPTH_MAX,
 )
 
 # Timeout threshold for downlink telemetry packets (seconds)
@@ -64,6 +66,13 @@ class MainWindow(QMainWindow):
         self._last_imu_time: float = 0.0
         self._last_depth_time: float = 0.0
         self._last_status_time: float = 0.0
+
+        # Speed mode (dual-speed via LB / RB)
+        self._speed_multiplier: float = SPEED_MULT_FAST
+
+        # Simulated depth (used when Bar30 sensor is not installed)
+        self._simulated_depth: float = 0.0
+        self._last_sim_time: float = time.monotonic()
 
         self._build_ui()
         self._start_clock()
@@ -270,17 +279,40 @@ class MainWindow(QMainWindow):
     def on_axes_updated(self, axes: dict):
         """Handle gamepad axes update.
 
+        - Apply speed multiplier to primary motion axes
         - Forward yaw to trajectory panel heading
-        - Forward all axes to Ethernet worker as motion command
+        - Update simulated depth if enabled
+        - Forward scaled axes to Ethernet worker as motion command
         """
-        # Yaw → trajectory heading
+        # Yaw → trajectory heading (before scaling — heading viz is 1:1)
         yaw_norm = axes.get("yaw", 0) / 1000.0  # back to -1..+1
         if yaw_norm != 0.0:
             self.traj_panel.update_heading(yaw_norm)
 
+        # ── Simulated depth (when Bar30 is absent) ────────────────────
+        if USE_SIMULATED_DEPTH:
+            now = time.monotonic()
+            dt = now - self._last_sim_time
+            self._last_sim_time = now
+
+            heave_norm = axes.get("heave", 0) / 1000.0  # -1..+1
+            # Negative heave_norm = stick pushed down = descend = depth increases
+            self._simulated_depth += -heave_norm * DEPTH_SIM_SPEED * dt
+            self._simulated_depth = max(0.0, min(POOL_DEPTH_MAX, self._simulated_depth))
+
+            self.alt_panel.update_depth(self._simulated_depth)
+            self._footer.set_bar30_status(
+                True, f"{self._simulated_depth:.2f}m (Sim)"
+            )
+
+        # ── Scale primary motion axes by speed multiplier ─────────────
+        scaled_axes = dict(axes)  # shallow copy
+        for key in ("surge", "sway", "heave", "yaw"):
+            scaled_axes[key] = int(round(axes.get(key, 0) * self._speed_multiplier))
+
         # Forward to Jetson via Ethernet
         if self._eth_worker is not None:
-            self._eth_worker.send_motion(axes)
+            self._eth_worker.send_motion(scaled_axes)
 
     @pyqtSlot(bool)
     def on_arm_event(self, armed: bool):
@@ -297,24 +329,27 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(str, bool)
     def on_button_event(self, action: str, pressed: bool):
-        """Handle button events from gamepad (gripper, ballast).
+        """Handle button events from gamepad (gripper, speed mode).
 
         Gripper uses one-shot trigger: only send on press, not on release.
-        Ballast retains hold-to-activate behaviour.
+        Speed mode: LB = slow (35%), RB = fast (100%) — single press toggle.
         """
-        if self._eth_worker is None:
-            return
-
         if action == "gripper_open":
-            if pressed:
+            if pressed and self._eth_worker is not None:
                 self._eth_worker.send_gripper(1)   # OPEN
         elif action == "gripper_close":
-            if pressed:
+            if pressed and self._eth_worker is not None:
                 self._eth_worker.send_gripper(2)   # CLOSE
-        elif action == "ballast_fill":
-            self._eth_worker.send_ballast(1 if pressed else 0)
-        elif action == "ballast_drain":
-            self._eth_worker.send_ballast(2 if pressed else 0)
+        elif action == "speed_slow" and pressed:
+            self._speed_multiplier = SPEED_MULT_SLOW
+            self.qr_panel.add_log(
+                f"SPEED: SLOW ({int(SPEED_MULT_SLOW * 100)}%)", COLOR_WARN
+            )
+        elif action == "speed_fast" and pressed:
+            self._speed_multiplier = SPEED_MULT_FAST
+            self.qr_panel.add_log(
+                f"SPEED: FAST ({int(SPEED_MULT_FAST * 100)}%)", COLOR_OK
+            )
 
     @pyqtSlot(str)
     def on_mode_changed(self, mode: str):
@@ -416,6 +451,8 @@ class MainWindow(QMainWindow):
 
     def _on_depth_updated(self, depth: float, alt: float):
         """Handle depth telemetry — update altitude panel + BAR30 indicator."""
+        if USE_SIMULATED_DEPTH:
+            return
         self.alt_panel.update_depth(depth)
         self._last_depth_time = time.monotonic()
         self._footer.set_bar30_status(True, f"{depth:.2f}m")
