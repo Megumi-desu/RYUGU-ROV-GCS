@@ -546,6 +546,61 @@ class TrajectoryPanel(QFrame):
         self._update_rov_arrow()
         self._update_coord_label()
 
+    # ── Hybrid dead-reckoning helpers (PIXHAWK_HYBRID mode) ───────────────
+
+    @pyqtSlot(float, float)
+    def update_position_hybrid(self, world_dx: float, world_dy: float):
+        """Update ROV position using pre-rotated world-frame deltas.
+
+        Called by MainWindow when POSITION_MODE == "PIXHAWK_HYBRID".
+        The body-to-world rotation has already been applied using the
+        real IMU yaw, so we just integrate the deltas directly.
+
+        Parameters
+        ----------
+        world_dx : float
+            Displacement in the world X axis (East) in metres.
+        world_dy : float
+            Displacement in the world Y axis (North) in metres.
+        """
+        if not self._mission_active:
+            return
+        if world_dx == 0.0 and world_dy == 0.0:
+            return
+
+        prev_x, prev_y = self._rov_x, self._rov_y
+        self._rov_x = max(0.0, min(self._rov_x + world_dx, POOL_SIZE_X))
+        self._rov_y = max(0.0, min(self._rov_y + world_dy, POOL_SIZE_Y))
+
+        # Accumulate distance traveled
+        step_dist = math.hypot(self._rov_x - prev_x, self._rov_y - prev_y)
+        self._total_distance += step_dist
+
+        self._path_x.append(self._rov_x)
+        self._path_y.append(self._rov_y)
+        self._path_line.setData(self._path_x, self._path_y)
+        self._pos_dot.setData([self._rov_x], [self._rov_y])
+        self._update_rov_arrow()
+        self._update_coord_label()
+
+    def set_heading_absolute(self, imu_yaw_deg: float):
+        """Set heading directly from IMU yaw (PIXHAWK_HYBRID mode).
+
+        Converts from NED convention (0°=North, CW positive) to the
+        plot convention (0°=East, CCW positive) used by pyqtgraph.
+
+        Parameters
+        ----------
+        imu_yaw_deg : float
+            Yaw heading from the Pixhawk IMU in degrees (NED frame).
+        """
+        if not self._mission_active:
+            return
+        # NED → math/plot:  plot_heading = 90 - imu_yaw
+        self._heading_deg = (90.0 - imu_yaw_deg) % 360.0
+        self._update_rov_arrow()
+        self._update_coord_label()
+
     def _update_coord_label(self):
         self._coord_label.setText(
             f"X: {self._rov_x:.1f}m  Y: {self._rov_y:.1f}m"

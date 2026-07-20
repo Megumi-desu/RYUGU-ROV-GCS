@@ -66,9 +66,16 @@ TRIGGER_GRIP_THRESH = 0.5    # trigger axis threshold for gripper activation
 SPEED_MULT_FAST = 1.0        # 100% thrust — normal operations
 SPEED_MULT_SLOW = 0.35       # 35% thrust — precision / inspection
 
-# ── Simulated Depth (when Bar30 is not installed) ────────────────────
-USE_SIMULATED_DEPTH = True   # True = simulate via heave stick input
-DEPTH_SIM_SPEED     = 0.15   # metres per second at full stick deflection
+# ── Position Estimation Mode ─────────────────────────────────────────
+# "GAMEPAD_ONLY"    — original open-loop dead reckoning (gamepad sticks only)
+# "PIXHAWK_HYBRID"  — uses real IMU orientation + gamepad thrust for DR
+POSITION_MODE = "GAMEPAD_ONLY"
+
+# ── Hybrid Dead Reckoning Tuning ─────────────────────────────────────
+# Virtual speed constants (metres per second at full stick deflection)
+HYBRID_SPEED_SURGE = 0.30   # forward/backward m/s at ±1000 stick
+HYBRID_SPEED_SWAY  = 0.25   # strafe m/s at ±1000 stick
+HYBRID_SPEED_HEAVE = 0.15   # ascend/descend m/s at ±1000 stick
 
 # ── Network (GCS ↔ Jetson Orin Nano) ─────────────────────────────────────
 GCS_IP      = "192.168.1.100"

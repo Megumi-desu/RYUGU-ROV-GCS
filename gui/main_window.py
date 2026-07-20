@@ -1,3 +1,4 @@
+import math
 import os
 import time
 from datetime import datetime
@@ -26,7 +27,8 @@ from utils.constants import (
     FONT_FAMILY,
     ASSET_LOGO_UB, ASSET_LOGO_KKI, ASSET_LOGO_TEAM,
     SPEED_MULT_FAST, SPEED_MULT_SLOW,
-    USE_SIMULATED_DEPTH, DEPTH_SIM_SPEED, POOL_DEPTH_MAX,
+    POSITION_MODE, POOL_DEPTH_MAX,
+    HYBRID_SPEED_SURGE, HYBRID_SPEED_SWAY, HYBRID_SPEED_HEAVE,
 )
 
 # Timeout threshold for downlink telemetry packets (seconds)
@@ -70,9 +72,17 @@ class MainWindow(QMainWindow):
         # Speed mode (dual-speed via LB / RB)
         self._speed_multiplier: float = SPEED_MULT_FAST
 
-        # Simulated depth (used when Bar30 sensor is not installed)
+        # ── Hybrid dead-reckoning state ───────────────────────────────
+        # Latest IMU orientation (degrees) — updated by _on_imu_updated
+        self._imu_pitch_deg: float = 0.0
+        self._imu_roll_deg: float = 0.0
+        self._imu_yaw_deg: float = 0.0
+
+        # Simulated depth (metres) — driven by hybrid DR or simple heave
         self._simulated_depth: float = 0.0
-        self._last_sim_time: float = time.monotonic()
+
+        # Monotonic timestamp for dt computation in hybrid DR
+        self._last_hybrid_time: float = time.monotonic()
 
         self._build_ui()
         self._start_clock()
@@ -279,31 +289,33 @@ class MainWindow(QMainWindow):
     def on_axes_updated(self, axes: dict):
         """Handle gamepad axes update.
 
-        - Apply speed multiplier to primary motion axes
-        - Forward yaw to trajectory panel heading
-        - Update simulated depth if enabled
-        - Forward scaled axes to Ethernet worker as motion command
+        Dual-mode position estimation:
+        - GAMEPAD_ONLY:    heading from yaw stick, position from sticks only
+        - PIXHAWK_HYBRID:  heading from IMU, position rotated by IMU yaw,
+                           depth coupled with pitch/roll
+
+        In both modes the motion command is scaled by speed_multiplier
+        before being sent to the Jetson.
         """
-        # Yaw → trajectory heading (before scaling — heading viz is 1:1)
-        yaw_norm = axes.get("yaw", 0) / 1000.0  # back to -1..+1
-        if yaw_norm != 0.0:
-            self.traj_panel.update_heading(yaw_norm)
+        # ── Time delta (used by both DR modes) ────────────────────────
+        now = time.monotonic()
+        dt = now - self._last_hybrid_time
+        self._last_hybrid_time = now
 
-        # ── Simulated depth (when Bar30 is absent) ────────────────────
-        if USE_SIMULATED_DEPTH:
-            now = time.monotonic()
-            dt = now - self._last_sim_time
-            self._last_sim_time = now
+        # ── Normalised stick inputs (-1..+1) ──────────────────────────
+        surge_norm = axes.get("surge", 0) / 1000.0
+        sway_norm  = axes.get("sway",  0) / 1000.0
+        heave_norm = axes.get("heave", 0) / 1000.0
+        yaw_norm   = axes.get("yaw",   0) / 1000.0
 
-            heave_norm = axes.get("heave", 0) / 1000.0  # -1..+1
-            # Negative heave_norm = stick pushed down = descend = depth increases
-            self._simulated_depth += -heave_norm * DEPTH_SIM_SPEED * dt
-            self._simulated_depth = max(0.0, min(POOL_DEPTH_MAX, self._simulated_depth))
-
-            self.alt_panel.update_depth(self._simulated_depth)
-            self._footer.set_bar30_status(
-                True, f"{self._simulated_depth:.2f}m (Sim)"
+        if POSITION_MODE == "PIXHAWK_HYBRID":
+            self._update_hybrid_dr(
+                surge_norm, sway_norm, heave_norm, yaw_norm, dt
             )
+        else:
+            # GAMEPAD_ONLY — original open-loop dead reckoning
+            if yaw_norm != 0.0:
+                self.traj_panel.update_heading(yaw_norm)
 
         # ── Scale primary motion axes by speed multiplier ─────────────
         scaled_axes = dict(axes)  # shallow copy
@@ -313,6 +325,57 @@ class MainWindow(QMainWindow):
         # Forward to Jetson via Ethernet
         if self._eth_worker is not None:
             self._eth_worker.send_motion(scaled_axes)
+
+    # ── Hybrid dead-reckoning core ────────────────────────────────────
+
+    def _update_hybrid_dr(self, surge: float, sway: float,
+                          heave: float, yaw: float, dt: float):
+        """Compute world-frame displacement using IMU orientation + gamepad.
+
+        Formulae (from implementation plan):
+            world_dx = (V_surge·cosψ + V_sway·sinψ) · dt
+            world_dy = (V_surge·sinψ - V_sway·cosψ) · dt
+            dZ/dt    = (V_heave·cosθ·cosφ) - (V_surge·sinθ) + (V_sway·sinφ)
+
+        Where ψ = IMU yaw (NED→plot converted), θ = pitch, φ = roll,
+        and V_* are virtual velocities = stick_norm × HYBRID_SPEED_*.
+        """
+        # IMU angles in radians
+        pitch_rad = math.radians(self._imu_pitch_deg)
+        roll_rad  = math.radians(self._imu_roll_deg)
+        # Yaw: NED (0°=N, CW+) → plot (0°=E, CCW+)
+        plot_yaw_deg = (90.0 - self._imu_yaw_deg) % 360.0
+        yaw_rad = math.radians(plot_yaw_deg)
+
+        # Virtual body-frame velocities (m/s)
+        v_surge = surge * HYBRID_SPEED_SURGE
+        v_sway  = sway  * HYBRID_SPEED_SWAY
+        v_heave = heave * HYBRID_SPEED_HEAVE
+
+        # ── Horizontal (X, Y) — rotate body velocities by IMU yaw ────
+        world_dx = (v_surge * math.cos(yaw_rad) + v_sway * math.sin(yaw_rad)) * dt
+        world_dy = (v_surge * math.sin(yaw_rad) - v_sway * math.cos(yaw_rad)) * dt
+
+        self.traj_panel.update_position_hybrid(world_dx, world_dy)
+
+        # ── Heading — set directly from IMU yaw ──────────────────────
+        self.traj_panel.set_heading_absolute(self._imu_yaw_deg)
+
+        # ── Vertical (Z) — depth with pitch/roll coupling ────────────
+        # Positive dz_dt = descending (depth increases)
+        # heave: positive = ascend in gamepad convention, so negate for depth
+        dz_dt = (
+            (-v_heave * math.cos(pitch_rad) * math.cos(roll_rad))
+            - (v_surge * math.sin(pitch_rad))
+            + (v_sway * math.sin(roll_rad))
+        )
+        self._simulated_depth += dz_dt * dt
+        self._simulated_depth = max(0.0, min(POOL_DEPTH_MAX, self._simulated_depth))
+
+        self.alt_panel.update_depth(self._simulated_depth)
+        self._footer.set_bar30_status(
+            True, f"{self._simulated_depth:.2f}m (Hybrid)"
+        )
 
     @pyqtSlot(bool)
     def on_arm_event(self, armed: bool):
@@ -417,8 +480,13 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(float, float, float)
     def _on_imu_updated(self, pitch: float, roll: float, yaw: float):
-        """Handle IMU data from Ethernet — update ROV design panel + footer."""
+        """Handle IMU data from Ethernet — update panels + store for hybrid DR."""
         self.rov_panel.update_state(f"P:{pitch:.0f}° R:{roll:.0f}° Y:{yaw:.0f}°")
+
+        # Store orientation for hybrid dead-reckoning computation
+        self._imu_pitch_deg = pitch
+        self._imu_roll_deg = roll
+        self._imu_yaw_deg = yaw
 
         # Mark IMU as alive
         self._last_imu_time = time.monotonic()
@@ -450,9 +518,13 @@ class MainWindow(QMainWindow):
     # ── Depth packet handler (called via wire_ethernet lambda) ────────
 
     def _on_depth_updated(self, depth: float, alt: float):
-        """Handle depth telemetry — update altitude panel + BAR30 indicator."""
-        if USE_SIMULATED_DEPTH:
-            return
+        """Handle depth telemetry — update altitude panel + BAR30 indicator.
+
+        When POSITION_MODE is PIXHAWK_HYBRID, depth is computed from
+        gamepad + IMU, so real depth packets are ignored.
+        """
+        if POSITION_MODE == "PIXHAWK_HYBRID":
+            return   # depth driven by hybrid DR, not telemetry
         self.alt_panel.update_depth(depth)
         self._last_depth_time = time.monotonic()
         self._footer.set_bar30_status(True, f"{depth:.2f}m")
