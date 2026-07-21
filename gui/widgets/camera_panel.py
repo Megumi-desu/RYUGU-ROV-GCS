@@ -1,6 +1,8 @@
+from typing import Optional
+
 import numpy as np
 from PyQt5.QtWidgets import QFrame, QLabel, QVBoxLayout
-from PyQt5.QtCore import Qt, pyqtSlot
+from PyQt5.QtCore import Qt, QMutex, pyqtSlot
 from PyQt5.QtGui import QImage, QPixmap, QFont, QPainter, QColor, QPen
 
 from utils.constants import (
@@ -22,6 +24,11 @@ class CameraPanel(QFrame):
         self._label = label
         self._has_frame = False
         self._stream_connected = False
+
+        # Latest frame buffer (thread-safe for local frame capture)
+        self._latest_frame: Optional[QImage] = None
+        self._frame_lock = QMutex()
+
         self._setup_ui()
 
     def _setup_ui(self):
@@ -121,6 +128,11 @@ class CameraPanel(QFrame):
         if qimg.isNull():
             return
 
+        # Store a copy for local frame capture (thread-safe)
+        self._frame_lock.lock()
+        self._latest_frame = qimg.copy()
+        self._frame_lock.unlock()
+
         pix = QPixmap.fromImage(qimg).scaled(
             self._feed.width(), self._feed.height(),
             Qt.KeepAspectRatio, Qt.SmoothTransformation
@@ -146,6 +158,12 @@ class CameraPanel(QFrame):
         # Convert BGR → RGB for Qt
         rgb = bgr_frame[..., ::-1].copy()
         qimg = QImage(rgb.data, w, h, ch * w, QImage.Format_RGB888)
+
+        # Store a copy for local frame capture (thread-safe)
+        self._frame_lock.lock()
+        self._latest_frame = qimg.copy()
+        self._frame_lock.unlock()
+
         pix = QPixmap.fromImage(qimg).scaled(
             self._feed.width(), self._feed.height(),
             Qt.KeepAspectRatio, Qt.SmoothTransformation
@@ -155,6 +173,18 @@ class CameraPanel(QFrame):
             self._has_frame = True
             self._info.setText(f"  {self._label}  —  {w}×{h}  LIVE")
             self._set_status_indicator("live")
+
+    # ── Latest frame getter (for local QR capture) ────────────────────
+
+    def get_latest_frame(self) -> Optional[QImage]:
+        """Return a copy of the most recent video frame, or None.
+
+        Thread-safe — may be called from any thread.
+        """
+        self._frame_lock.lock()
+        frame = self._latest_frame.copy() if self._latest_frame is not None else None
+        self._frame_lock.unlock()
+        return frame
 
     # ── Connection status ─────────────────────────────────────────────
 

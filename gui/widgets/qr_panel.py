@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
     QSizePolicy, QPushButton
 )
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
-from PyQt5.QtGui import QFont, QPixmap
+from PyQt5.QtGui import QFont, QImage, QPixmap
 
 from utils.constants import (
     COLOR_PANEL, COLOR_BORDER, COLOR_ACCENT,
@@ -178,6 +178,25 @@ class QRResultPanel(QFrame):
             self._logo_lbl.setFont(QFont(FONT_FAMILY, 22, QFont.Bold))
             self._logo_lbl.setStyleSheet(f"color: {COLOR_ACCENT}; border: none;")
 
+    def set_qr_image(self, qimg: QImage):
+        """Display a captured frame in the logo/image area.
+
+        Replaces the team logo with the video frame that was active
+        when the QR code was detected.
+
+        Parameters
+        ----------
+        qimg : QImage
+            The captured video frame.
+        """
+        if qimg.isNull():
+            return
+        pix = QPixmap.fromImage(qimg).scaled(
+            self._logo_lbl.width(), self._logo_lbl.height(),
+            Qt.KeepAspectRatio, Qt.SmoothTransformation
+        )
+        self._logo_lbl.setPixmap(pix)
+
     # ── E-STOP logic ──────────────────────────────────────────────────
 
     @staticmethod
@@ -296,6 +315,9 @@ class QRResultPanel(QFrame):
         self.add_log(f"QR SIDE-{side} {status_str}", color)
 
     def reset(self):
+        # Restore team logo (clear any captured QR image)
+        self._load_team_logo()
+
         self._side_value.setText("—")
         self._status_label.setText("AWAITING SCAN")
         self._status_label.setStyleSheet(

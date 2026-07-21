@@ -203,13 +203,15 @@ class TestPayloadRoundtrip:
         assert status["thrusters"] == thrusters
 
     def test_qr(self):
+        camera_id = 0
         zone_id = 1  # B
         valid = 1
         qr_str = b"KKI2026-B-OK"
-        payload = struct.pack("<BBB", zone_id, valid, len(qr_str)) + qr_str
+        payload = struct.pack("<BBBB", camera_id, zone_id, valid, len(qr_str)) + qr_str
         pkt = build_packet(QR_RESULT, payload)
         parsed = parse_packet(pkt)
-        zone, is_valid, text = parse_qr(parsed.payload)
+        cam_id, zone, is_valid, text = parse_qr(parsed.payload)
+        assert cam_id == 0
         assert zone == "B"
         assert is_valid is True
         assert text == "KKI2026-B-OK"

@@ -90,8 +90,8 @@ class EthernetWorker(QThread):
     status_updated : dict
         Keys: battery_v (float), arm_state (bool), mode (str),
         thrusters (list[int]).
-    qr_detected : str, bool, str
-        zone letter, is_valid, payload string.
+    qr_detected : int, str, bool, str
+        camera_id, zone letter, is_valid, payload string.
 
     Signals (connection)
     ---------------------
@@ -108,7 +108,7 @@ class EthernetWorker(QThread):
     imu_updated = pyqtSignal(float, float, float)
     depth_updated = pyqtSignal(float, float)
     status_updated = pyqtSignal(dict)
-    qr_detected = pyqtSignal(str, bool, str)
+    qr_detected = pyqtSignal(int, str, bool, str)
 
     connection_changed = pyqtSignal(bool)
     command_acked = pyqtSignal(int)
@@ -224,8 +224,8 @@ class EthernetWorker(QThread):
                 self.status_updated.emit(status)
 
             elif packet_id == QR_RESULT:
-                zone, valid, text = parse_qr(payload)
-                self.qr_detected.emit(zone, valid, text)
+                camera_id, zone, valid, text = parse_qr(payload)
+                self.qr_detected.emit(camera_id, zone, valid, text)
 
             elif packet_id == ACK:
                 acked_id = parse_ack(payload)

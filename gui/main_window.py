@@ -84,6 +84,9 @@ class MainWindow(QMainWindow):
         # Monotonic timestamp for dt computation in hybrid DR
         self._last_hybrid_time: float = time.monotonic()
 
+        # Local QR frame capture — deduplication state
+        self._last_qr_text: str | None = None
+
         self._build_ui()
         self._start_clock()
 
@@ -457,7 +460,7 @@ class MainWindow(QMainWindow):
         worker.depth_updated.connect(self._on_depth_updated)
         worker.imu_updated.connect(self._on_imu_updated)
         worker.status_updated.connect(self._on_status_updated)
-        worker.qr_detected.connect(self.qr_panel.update_qr)
+        worker.qr_detected.connect(self._on_qr_detected)
 
         # Connection status → footer + status log
         worker.connection_changed.connect(self._on_connection_changed)
@@ -528,6 +531,45 @@ class MainWindow(QMainWindow):
         self.alt_panel.update_depth(depth)
         self._last_depth_time = time.monotonic()
         self._footer.set_bar30_status(True, f"{depth:.2f}m")
+
+    # ── QR local frame capture ───────────────────────────────────────
+
+    @pyqtSlot(int, str, bool, str)
+    def _on_qr_detected(self, camera_id: int, zone: str, valid: bool, raw_text: str):
+        """Handle QR telemetry — update QR panel + capture frame if new.
+
+        On each QR_RESULT (0x04) packet the raw decoded text is compared
+        against the previously seen value.  If it differs (or this is the
+        first detection), the latest video frame from the camera corresponding
+        to camera_id (0: front, 1: bottom) is grabbed and displayed on the QR panel.
+        """
+        # Always forward the parsed QR data to the panel
+        self.qr_panel.update_qr(zone, valid, raw_text)
+
+        # Capture frame only when the QR text changes
+        if raw_text != self._last_qr_text:
+            self._last_qr_text = raw_text
+
+            # Select camera based on camera_id (0 = front cam, 1 = bottom cam)
+            if camera_id == 1:
+                frame = self.cam_bottom.get_latest_frame()
+                if frame is None:
+                    frame = self.cam_front.get_latest_frame()
+            else:
+                frame = self.cam_front.get_latest_frame()
+                if frame is None:
+                    frame = self.cam_bottom.get_latest_frame()
+
+            if frame is not None:
+                self.qr_panel.set_qr_image(frame)
+
+    def reset_qr_state(self):
+        """Reset the QR capture state and restore the team logo.
+
+        Call this from the GCS RESET button handler.
+        """
+        self._last_qr_text = None
+        self.qr_panel.reset()
 
     # ── Legacy wiring helpers (kept for compatibility) ────────────────
 

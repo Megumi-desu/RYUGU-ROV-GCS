@@ -321,11 +321,11 @@ def parse_status(payload: bytes) -> dict:
     }
 
 
-def parse_qr(payload: bytes) -> tuple[str, bool, str]:
-    """Unpack QR result → (zone, valid, payload_string)."""
-    zone_id, valid, str_len = struct.unpack("<BBB", payload[:3])
-    qr_str = payload[3:3 + str_len].decode("ascii", errors="replace")
-    return QR_ZONES.get(zone_id, "?"), bool(valid), qr_str
+def parse_qr(payload: bytes) -> tuple[int, str, bool, str]:
+    """Unpack QR result → (camera_id, zone, valid, payload_string)."""
+    camera_id, zone_id, valid, str_len = struct.unpack("<BBBB", payload[:4])
+    qr_str = payload[4:4 + str_len].decode("ascii", errors="replace")
+    return camera_id, QR_ZONES.get(zone_id, "?"), bool(valid), qr_str
 
 
 def parse_ack(payload: bytes) -> int:
