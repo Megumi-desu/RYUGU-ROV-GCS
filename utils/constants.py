@@ -69,7 +69,7 @@ SPEED_MULT_SLOW = 0.35       # 35% thrust — precision / inspection
 # ── Position Estimation Mode ─────────────────────────────────────────
 # "GAMEPAD_ONLY"    — original open-loop dead reckoning (gamepad sticks only)
 # "PIXHAWK_HYBRID"  — uses real IMU orientation + gamepad thrust for DR
-POSITION_MODE = "GAMEPAD_ONLY"
+POSITION_MODE = "PIXHAWK_HYBRID"
 
 # ── Hybrid Dead Reckoning Tuning ─────────────────────────────────────
 # Virtual speed constants (metres per second at full stick deflection)
@@ -88,6 +88,11 @@ TELEM_PORT  = 5002    # UDP — downlink telemetry (Jetson → GCS)
 STREAM_URL_FRONT  = f"http://{JETSON_IP}:8554/video"
 STREAM_URL_BOTTOM = f"http://{JETSON_IP}:8555/video"
 CAMERA_RECONNECT_S = 1.5  # seconds between reconnection attempts
+
+# ── MJPEG Spectator Server ─────────────────────────────────────────────
+MJPEG_PORT         = 8080   # HTTP server for web spectator video streams
+MJPEG_JPEG_QUALITY = 70     # JPEG compression quality (1-100)
+MJPEG_FPS          = 10     # frame grab rate per camera
 
 # ── Asset paths (relative to project root) ───────────────────────────────
 ASSET_LOGO_UB    = "assets/logo_ub.png"

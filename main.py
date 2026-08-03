@@ -23,6 +23,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger("GCS")
 
+# ── Load .env (Supabase keys, tunables) — before any app code ────────────────
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed — GCS still runs; broadcaster no-ops
+
 # ── DPI fix — MUST be before QApplication ────────────────────────────────
 # Without this, Windows 11 DPI scaling breaks the layout at 125% / 150%.
 try:
@@ -48,9 +55,12 @@ from gui.main_window import MainWindow
 from core.gamepad_controller import GamepadController
 from core.ethernet_worker import EthernetWorker
 from core.camera_stream_worker import CameraStreamWorker
+from core.telemetry_broadcaster import TelemetryBroadcaster
+from core.mjpeg_server import MjpegStreamServer
 from utils.constants import (
     STREAM_URL_FRONT, STREAM_URL_BOTTOM,
     GCS_IP, TELEM_PORT,
+    POSITION_MODE, MJPEG_PORT,
 )
 
 
@@ -110,6 +120,20 @@ def main():
     cam_front = CameraStreamWorker(STREAM_URL_FRONT, "FRONT CAM")
     cam_bottom = CameraStreamWorker(STREAM_URL_BOTTOM, "BOTTOM CAM")
 
+    # ── Telemetry broadcaster (Supabase Realtime) ──────────────────────
+    broadcaster = TelemetryBroadcaster(
+        supabase_url=os.getenv("SUPABASE_URL", ""),
+        anon_key=os.getenv("SUPABASE_ANON_KEY", ""),
+        hz=float(os.getenv("TELEMETRY_BROADCAST_HZ", "5")),
+        use_simulated_depth=(POSITION_MODE == "PIXHAWK_HYBRID"),
+    )
+
+    # ── MJPEG server (web spectator video) ─────────────────────────────
+    mjpeg = MjpegStreamServer(
+        urls={"cam1": STREAM_URL_FRONT, "cam2": STREAM_URL_BOTTOM},
+        port=int(os.getenv("MJPEG_PORT", str(MJPEG_PORT))),
+    )
+
     # ── Wire gamepad → MainWindow ─────────────────────────────────────
     # Position delta → Trajectory Panel (dead reckoning)
     gamepad.position_delta.connect(window.traj_panel.update_position)
@@ -141,6 +165,13 @@ def main():
     # ── Wire Ethernet worker → MainWindow ─────────────────────────────
     window.wire_ethernet(eth_worker)
 
+    # ── Tap Ethernet telemetry → broadcaster (read-only, no UDP) ──────
+    eth_worker.imu_updated.connect(broadcaster.on_imu)
+    eth_worker.depth_updated.connect(broadcaster.on_depth)
+    eth_worker.status_updated.connect(broadcaster.on_status)
+    eth_worker.connection_changed.connect(broadcaster.on_connection)
+    window.simulated_depth_changed.connect(broadcaster.on_simulated_depth)
+
     # ── Wire camera streams → camera panels ───────────────────────────
     cam_front.frame_ready.connect(window.cam_front.update_frame_qimage)
     cam_front.connection_status.connect(window.cam_front.set_stream_status)
@@ -153,6 +184,8 @@ def main():
     eth_worker.start()
     cam_front.start()
     cam_bottom.start()
+    broadcaster.start()
+    mjpeg.start()
 
     # ── Show window ───────────────────────────────────────────────────
     window.showMaximized()
@@ -161,6 +194,8 @@ def main():
     def on_quit():
         cam_front.stop()
         cam_bottom.stop()
+        broadcaster.stop()
+        mjpeg.stop()
         gamepad.stop()
         eth_worker.stop()
 

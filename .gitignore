@@ -38,11 +38,22 @@ desktop.ini
 # Sensitive
 *.env
 config_local.py
+Project-API-Key.txt
+
+# Web spectator (Next.js)
+web-spectator/node_modules/
+web-spectator/.next/
+web-spectator/out/
+
+# Keep example env template
+!**/.env.example
 
 # AI Agent Configs & Remnants
 .agents/
 .claude/
 skills-lock.json
+CLAUDE.md
+graphify-out/
 
 # Test cache
 .pytest_cache/

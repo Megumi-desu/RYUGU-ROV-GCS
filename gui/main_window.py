@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGridLayout, QLabel, QSizePolicy, QFrame
 )
-from PyQt5.QtCore import Qt, QTimer, pyqtSlot
+from PyQt5.QtCore import Qt, QTimer, pyqtSlot, pyqtSignal
 from PyQt5.QtGui import QFont, QPixmap
 
 from gui.widgets.camera_panel     import CameraPanel
@@ -48,6 +48,10 @@ class MainWindow(QMainWindow):
     Top-level window for the ROV GCS.
     Hosts all panels and wires them to data threads via Qt signals.
     """
+
+    # Emitted whenever the GCS-computed depth changes (PIXHAWK_HYBRID or
+    # GAMEPAD_ONLY).  Value is in metres, clamped to [0, POOL_DEPTH_MAX].
+    simulated_depth_changed = pyqtSignal(float)
 
     def __init__(self):
         super().__init__()
@@ -320,6 +324,18 @@ class MainWindow(QMainWindow):
             if yaw_norm != 0.0:
                 self.traj_panel.update_heading(yaw_norm)
 
+            # Dummy Depth / Altitude Simulation from Right Stick Y (heave_norm)
+            # When live Bar30 telemetry is offline, right stick Y updates dummy altitude.
+            if time.monotonic() - self._last_depth_time > 2.0:
+                v_heave = heave_norm * HYBRID_SPEED_HEAVE
+                dz_dt = -v_heave  # Right stick DOWN (heave_norm < 0) -> depth increases
+                if dz_dt != 0.0 or heave_norm != 0.0:
+                    self._simulated_depth += dz_dt * dt
+                    self._simulated_depth = max(0.0, min(POOL_DEPTH_MAX, self._simulated_depth))
+                    self.simulated_depth_changed.emit(self._simulated_depth)
+                    self.alt_panel.update_depth(self._simulated_depth)
+                    self._footer.set_bar30_status(True, f"{self._simulated_depth:.2f}m (Sim)")
+
         # ── Scale primary motion axes by speed multiplier ─────────────
         scaled_axes = dict(axes)  # shallow copy
         for key in ("surge", "sway", "heave", "yaw"):
@@ -374,6 +390,7 @@ class MainWindow(QMainWindow):
         )
         self._simulated_depth += dz_dt * dt
         self._simulated_depth = max(0.0, min(POOL_DEPTH_MAX, self._simulated_depth))
+        self.simulated_depth_changed.emit(self._simulated_depth)
 
         self.alt_panel.update_depth(self._simulated_depth)
         self._footer.set_bar30_status(
