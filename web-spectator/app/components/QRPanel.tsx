@@ -36,13 +36,21 @@ export default function QRPanel({ armed, mode, voltage, qr }: Props) {
 
       {/* Content */}
       <div className="flex flex-col flex-1 gap-1.5 p-2.5 overflow-y-auto min-h-0">
-        {/* Team logo */}
+        {/* QR Snapshot Image or Team Logo fallback */}
         <div className="flex items-center justify-center shrink-0">
-          <img
-            src="/logo_team.png"
-            alt="RYUGU"
-            className="h-24 object-contain opacity-80"
-          />
+          {qr.image ? (
+            <img
+              src={`data:image/jpeg;base64,${qr.image}`}
+              alt="Scanned QR Snapshot"
+              className="w-full h-32 object-contain rounded border border-border bg-panel-dark"
+            />
+          ) : (
+            <img
+              src="/logo_team.png"
+              alt="RYUGU"
+              className="h-24 object-contain opacity-80"
+            />
+          )}
         </div>
 
         {/* SIDE label */}

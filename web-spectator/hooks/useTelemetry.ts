@@ -28,6 +28,7 @@ export interface TelemetryQR {
   valid: boolean;
   text: string;
   logs: string[];
+  image?: string;
 }
 
 export interface TelemetryPayload {

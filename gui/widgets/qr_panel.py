@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QFrame, QLabel, QVBoxLayout, QHBoxLayout,
     QSizePolicy, QPushButton
 )
-from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot, QByteArray, QBuffer, QIODevice
 from PyQt5.QtGui import QFont, QImage, QPixmap
 
 from utils.constants import (
@@ -33,6 +33,7 @@ class QRResultPanel(QFrame):
 
     emergency_stop = pyqtSignal()   # connected to MAVLink disarm in production
     qr_data_updated = pyqtSignal(str, bool, str, list)  # side, valid, raw_text, logs
+    qr_image_updated = pyqtSignal(str)  # base64 JPEG snapshot
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -183,7 +184,9 @@ class QRResultPanel(QFrame):
         """Display a captured frame in the logo/image area.
 
         Replaces the team logo with the video frame that was active
-        when the QR code was detected.
+        when the QR code was detected.  Also encodes the frame as a
+        JPEG base64 string and emits ``qr_image_updated`` for the
+        telemetry broadcaster.
 
         Parameters
         ----------
@@ -197,6 +200,14 @@ class QRResultPanel(QFrame):
             Qt.KeepAspectRatio, Qt.SmoothTransformation
         )
         self._logo_lbl.setPixmap(pix)
+
+        # Encode to JPEG base64 for web spectator
+        ba = QByteArray()
+        buf = QBuffer(ba)
+        buf.open(QIODevice.WriteOnly)
+        qimg.save(buf, "JPEG", 60)
+        b64 = ba.toBase64().data().decode("utf-8")
+        self.qr_image_updated.emit(b64)
 
     # ── E-STOP logic ──────────────────────────────────────────────────
 

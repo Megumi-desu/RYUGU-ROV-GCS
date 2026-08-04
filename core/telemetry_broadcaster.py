@@ -131,6 +131,7 @@ class TelemetryBroadcaster(QThread):
         self._qr_valid: bool = False
         self._qr_text: str = ""
         self._qr_logs: list[str] = []
+        self._qr_image_base64: str = ""
 
     # ── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -262,6 +263,7 @@ class TelemetryBroadcaster(QThread):
                 "valid": self._qr_valid,
                 "text": self._qr_text,
                 "logs": list(self._qr_logs),
+                "image": self._qr_image_base64,
             },
         }
 
@@ -333,4 +335,15 @@ class TelemetryBroadcaster(QThread):
         self._qr_valid = valid
         self._qr_text = text
         self._qr_logs = logs
+
+    @pyqtSlot(str)
+    def on_qr_image(self, image_base64: str):
+        """Update QR snapshot image from QR panel.
+
+        Parameters
+        ----------
+        image_base64 : str
+            JPEG-encoded frame as a base64 string (no data URI prefix).
+        """
+        self._qr_image_base64 = image_base64
 
