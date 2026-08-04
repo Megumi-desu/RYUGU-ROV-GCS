@@ -8,35 +8,35 @@ interface Props {
   yaw: number;
 }
 
-const AXIS_CANVAS_W = 200;
-const AXIS_CANVAS_H = 60;
+const AXIS_W = 70;
+const AXIS_H = 70;
 
 /**
  * Displays the static ROV design image with a vector-drawn coordinate
- * axis indicator and live orientation readout.
+ * axis indicator overlaid in the bottom-left corner and live
+ * orientation readout.
  */
 export default function ROVDesignPanel({ pitch, roll, yaw }: Props) {
   const axisCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Draw vector axis lines
   useEffect(() => {
     const canvas = axisCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const w = AXIS_CANVAS_W;
-    const h = AXIS_CANVAS_H;
+    const w = AXIS_W;
+    const h = AXIS_H;
     ctx.clearRect(0, 0, w, h);
 
-    // Origin near bottom-center
-    const ox = w / 2;
-    const oy = h - 10;
-    const len = 28;
+    // Origin in bottom-left of the small canvas
+    const ox = 12;
+    const oy = h - 12;
+    const len = 26;
 
-    // X — forward (upper-right at ~30°)
+    // X — forward (upper-right)
     drawAxis(ctx, ox, oy, len, -Math.PI / 6, "#e94560", "X");
-    // Y — lateral (lower-right at ~30°)
+    // Y — lateral (lower-right)
     drawAxis(ctx, ox, oy, len, Math.PI / 6, "#4caf50", "Y");
     // Z — up (straight up)
     drawAxis(ctx, ox, oy, len, -Math.PI / 2, "#2196f3", "Z");
@@ -49,22 +49,21 @@ export default function ROVDesignPanel({ pitch, roll, yaw }: Props) {
         ROV DESIGN
       </div>
 
-      {/* Content — image + axes */}
-      <div className="flex-1 flex flex-col items-center justify-center min-h-0 bg-panel-dark px-2 py-1 gap-1 overflow-hidden">
-        {/* ROV image — constrained to not overflow */}
+      {/* Content — relative so axes overlay in corner */}
+      <div className="flex-1 relative flex items-center justify-center min-h-0 bg-panel-dark overflow-hidden">
+        {/* ROV image — fills available space */}
         <img
           src="/rov_design.png"
           alt="ROV Design"
-          className="w-auto h-auto max-h-[55%] max-w-[90%] object-contain shrink"
+          className="max-w-[92%] max-h-[88%] object-contain"
         />
 
-        {/* Vector axis indicator */}
+        {/* Axis indicator — anchored bottom-left */}
         <canvas
           ref={axisCanvasRef}
-          width={AXIS_CANVAS_W}
-          height={AXIS_CANVAS_H}
-          className="shrink-0"
-          style={{ maxWidth: "100%", maxHeight: `${AXIS_CANVAS_H}px` }}
+          width={AXIS_W}
+          height={AXIS_H}
+          className="absolute bottom-2 left-2 opacity-90"
         />
       </div>
 
@@ -76,7 +75,6 @@ export default function ROVDesignPanel({ pitch, roll, yaw }: Props) {
   );
 }
 
-/** Draw a single colored arrow from (ox, oy) in direction `angle` (radians). */
 function drawAxis(
   ctx: CanvasRenderingContext2D,
   ox: number,
