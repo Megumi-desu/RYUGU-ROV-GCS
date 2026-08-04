@@ -18,7 +18,16 @@ export interface TelemetryMetrics {
   roll: number;
   yaw: number;
   voltage: number;
-  temp_internal: number | null;
+  pos_x: number;
+  pos_y: number;
+  pos_dist: number;
+}
+
+export interface TelemetryQR {
+  side: string;
+  valid: boolean;
+  text: string;
+  logs: string[];
 }
 
 export interface TelemetryPayload {
@@ -26,6 +35,7 @@ export interface TelemetryPayload {
   timestamp: number;
   status: TelemetryStatus;
   metrics: TelemetryMetrics;
+  qr: TelemetryQR;
 }
 
 const HEARTBEAT_TIMEOUT_MS = 3000;
@@ -41,7 +51,16 @@ const EMPTY_METRICS: TelemetryMetrics = {
   roll: 0,
   yaw: 0,
   voltage: 0,
-  temp_internal: null,
+  pos_x: 0,
+  pos_y: 0,
+  pos_dist: 0,
+};
+
+const EMPTY_QR: TelemetryQR = {
+  side: "",
+  valid: false,
+  text: "",
+  logs: [],
 };
 
 const EMPTY_STATUS: TelemetryStatus = {
@@ -56,6 +75,7 @@ export function useTelemetry() {
     timestamp: 0,
     status: EMPTY_STATUS,
     metrics: EMPTY_METRICS,
+    qr: EMPTY_QR,
   });
   const [online, setOnline] = useState(false);
   const lastSeenRef = useRef<number>(0);
@@ -100,5 +120,6 @@ export function useTelemetry() {
     online,
     status: online ? payload.status : { ...EMPTY_STATUS, online: false },
     metrics: payload.metrics,
+    qr: payload.qr ?? EMPTY_QR,
   };
 }

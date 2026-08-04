@@ -59,6 +59,7 @@ class TrajectoryPanel(QFrame):
     mission_started = pyqtSignal()
     mission_paused = pyqtSignal()
     mission_ended = pyqtSignal()
+    position_changed = pyqtSignal(float, float, float)  # x, y, total_distance
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -527,6 +528,7 @@ class TrajectoryPanel(QFrame):
         self._pos_dot.setData([self._rov_x], [self._rov_y])
         self._update_rov_arrow()
         self._update_coord_label()
+        self.position_changed.emit(self._rov_x, self._rov_y, self._total_distance)
 
     @pyqtSlot(float)
     def update_heading(self, dyaw: float):
@@ -582,6 +584,7 @@ class TrajectoryPanel(QFrame):
         self._pos_dot.setData([self._rov_x], [self._rov_y])
         self._update_rov_arrow()
         self._update_coord_label()
+        self.position_changed.emit(self._rov_x, self._rov_y, self._total_distance)
 
     def set_heading_absolute(self, imu_yaw_deg: float):
         """Set heading directly from IMU yaw (PIXHAWK_HYBRID mode).

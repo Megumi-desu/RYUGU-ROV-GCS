@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Settings } from "lucide-react";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = [
@@ -22,9 +23,10 @@ function formatClock(): string {
 
 interface Props {
   online: boolean;
+  onOpenSettings: () => void;
 }
 
-export default function TopBar({ online }: Props) {
+export default function TopBar({ online, onOpenSettings }: Props) {
   const [clock, setClock] = useState(formatClock());
 
   useEffect(() => {
@@ -59,6 +61,15 @@ export default function TopBar({ online }: Props) {
       >
         {online ? "🟢 LIVE" : "🔴 OFFLINE"}
       </span>
+
+      {/* Settings button */}
+      <button
+        onClick={onOpenSettings}
+        className="text-text-dim hover:text-text hover:bg-panel-dark rounded p-1.5 transition-colors"
+        title="Video Stream Settings"
+      >
+        <Settings className="w-4 h-4" />
+      </button>
 
       {/* Clock */}
       <span className="text-text-dim font-mono text-xs mr-2 min-w-[210px] text-right">

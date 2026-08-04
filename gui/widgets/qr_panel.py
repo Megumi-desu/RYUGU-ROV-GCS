@@ -32,6 +32,7 @@ class QRResultPanel(QFrame):
     SIDES = ["A", "B", "C", "D"]
 
     emergency_stop = pyqtSignal()   # connected to MAVLink disarm in production
+    qr_data_updated = pyqtSignal(str, bool, str, list)  # side, valid, raw_text, logs
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -313,6 +314,10 @@ class QRResultPanel(QFrame):
         status_str = "OK" if valid else "NG"
         color = COLOR_OK if valid else COLOR_ERROR
         self.add_log(f"QR SIDE-{side} {status_str}", color)
+
+        # Emit for telemetry broadcaster
+        log_texts = [entry[0] for entry in self._log_entries]
+        self.qr_data_updated.emit(side, valid, raw, log_texts)
 
     def reset(self):
         # Restore team logo (clear any captured QR image)

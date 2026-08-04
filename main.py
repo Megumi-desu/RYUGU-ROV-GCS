@@ -172,6 +172,10 @@ def main():
     eth_worker.connection_changed.connect(broadcaster.on_connection)
     window.simulated_depth_changed.connect(broadcaster.on_simulated_depth)
 
+    # ── Tap trajectory & QR → broadcaster ────────────────────────────
+    window.traj_panel.position_changed.connect(broadcaster.on_position)
+    window.qr_panel.qr_data_updated.connect(broadcaster.on_qr)
+
     # ── Wire camera streams → camera panels ───────────────────────────
     cam_front.frame_ready.connect(window.cam_front.update_frame_qimage)
     cam_front.connection_status.connect(window.cam_front.set_stream_status)

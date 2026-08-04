@@ -121,6 +121,17 @@ class TelemetryBroadcaster(QThread):
         # Connection (Jetson UDP link)
         self._jetson_connected: bool = False
 
+        # Position (dead reckoning)
+        self._pos_x: float = 0.0
+        self._pos_y: float = 0.0
+        self._pos_dist: float = 0.0
+
+        # QR
+        self._qr_side: str = ""
+        self._qr_valid: bool = False
+        self._qr_text: str = ""
+        self._qr_logs: list[str] = []
+
     # ── Lifecycle ────────────────────────────────────────────────────────────
 
     def run(self):
@@ -209,14 +220,15 @@ class TelemetryBroadcaster(QThread):
     # ── Payload builder ──────────────────────────────────────────────────────
 
     def _build_payload(self) -> dict:
-        """Build the JSON payload matching the PRD schema exactly.
+        """Build the JSON payload matching the expanded schema.
 
         Returns
         -------
         dict
             Keys: event, timestamp, status {online, armed, mode},
             metrics {depth, depth_raw, altitude, heading, pitch, roll,
-                     yaw, voltage, temp_internal}.
+                     yaw, voltage, pos_x, pos_y, pos_dist},
+            qr {side, valid, text, logs}.
         """
         online = (
             self._jetson_connected
@@ -241,7 +253,15 @@ class TelemetryBroadcaster(QThread):
                 "roll": self._roll,
                 "yaw": self._yaw,
                 "voltage": self._battery_v,
-                "temp_internal": None,   # TODO: wire when Jetson protocol adds temp
+                "pos_x": self._pos_x,
+                "pos_y": self._pos_y,
+                "pos_dist": self._pos_dist,
+            },
+            "qr": {
+                "side": self._qr_side,
+                "valid": self._qr_valid,
+                "text": self._qr_text,
+                "logs": list(self._qr_logs),
             },
         }
 
@@ -276,3 +296,41 @@ class TelemetryBroadcaster(QThread):
     @pyqtSlot(float)
     def on_simulated_depth(self, depth_m: float):
         self._depth_sim = depth_m
+
+    @pyqtSlot(float, float, float)
+    def on_position(self, x: float, y: float, dist: float):
+        """Update position state from trajectory panel.
+
+        Parameters
+        ----------
+        x : float
+            World X position in metres.
+        y : float
+            World Y position in metres.
+        dist : float
+            Total distance travelled in metres.
+        """
+        self._pos_x = x
+        self._pos_y = y
+        self._pos_dist = dist
+
+    @pyqtSlot(str, bool, str, list)
+    def on_qr(self, side: str, valid: bool, text: str, logs: list):
+        """Update QR state from QR panel.
+
+        Parameters
+        ----------
+        side : str
+            Detected QR side label (A, B, C, D).
+        valid : bool
+            Whether the QR was validated successfully.
+        text : str
+            Raw decoded QR text.
+        logs : list of str
+            Recent status log entries.
+        """
+        self._qr_side = side
+        self._qr_valid = valid
+        self._qr_text = text
+        self._qr_logs = logs
+
