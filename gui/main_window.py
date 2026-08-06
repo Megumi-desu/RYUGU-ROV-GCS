@@ -349,36 +349,45 @@ class MainWindow(QMainWindow):
 
     def _update_hybrid_dr(self, surge: float, sway: float,
                           heave: float, yaw: float, dt: float):
-        """Compute world-frame displacement using IMU orientation + gamepad.
+        """Compute world-frame displacement using manual heading + gamepad.
 
-        Formulae (from implementation plan):
+        Decoupled from Pixhawk compass — heading comes from the trajectory
+        panel's manually-calibrated heading, updated by gamepad yaw stick.
+        Raw IMU pitch/roll/yaw are still used for the attitude panel and
+        depth coupling, but NOT for 2D trajectory dead reckoning.
+
+        Formulae:
             world_dx = (V_surge·cosψ + V_sway·sinψ) · dt
             world_dy = (V_surge·sinψ - V_sway·cosψ) · dt
             dZ/dt    = (V_heave·cosθ·cosφ) - (V_surge·sinθ) + (V_sway·sinφ)
 
-        Where ψ = IMU yaw (NED→plot converted), θ = pitch, φ = roll,
-        and V_* are virtual velocities = stick_norm × HYBRID_SPEED_*.
+        Where ψ = manually-calibrated trajectory heading (set via START
+        workflow), θ = pitch, φ = roll, and V_* are virtual velocities =
+        stick_norm × HYBRID_SPEED_*.
         """
-        # IMU angles in radians
+        # IMU angles in radians (pitch/roll for depth coupling only)
         pitch_rad = math.radians(self._imu_pitch_deg)
         roll_rad  = math.radians(self._imu_roll_deg)
-        # Yaw: NED (0°=N, CW+) → plot (0°=E, CCW+)
-        plot_yaw_deg = (90.0 - self._imu_yaw_deg) % 360.0
-        yaw_rad = math.radians(plot_yaw_deg)
+        # Yaw: from trajectory panel's manually-calibrated heading
+        # (0°=East, CCW+), NOT from Pixhawk compass
+        traj_heading_deg = self.traj_panel.get_heading()
+        yaw_rad = math.radians(traj_heading_deg)
 
         # Virtual body-frame velocities (m/s)
         v_surge = surge * HYBRID_SPEED_SURGE
         v_sway  = sway  * HYBRID_SPEED_SWAY
         v_heave = heave * HYBRID_SPEED_HEAVE
 
-        # ── Horizontal (X, Y) — rotate body velocities by IMU yaw ────
+        # ── Update trajectory heading from gamepad yaw stick ──────────
+        # (replaces set_heading_absolute with IMU yaw)
+        if yaw != 0.0:
+            self.traj_panel.update_heading(yaw)
+
+        # ── Horizontal (X, Y) — rotate body velocities by manual heading ─
         world_dx = (v_surge * math.cos(yaw_rad) + v_sway * math.sin(yaw_rad)) * dt
         world_dy = (v_surge * math.sin(yaw_rad) - v_sway * math.cos(yaw_rad)) * dt
 
         self.traj_panel.update_position_hybrid(world_dx, world_dy)
-
-        # ── Heading — set directly from IMU yaw ──────────────────────
-        self.traj_panel.set_heading_absolute(self._imu_yaw_deg)
 
         # ── Vertical (Z) — depth with pitch/roll coupling ────────────
         # Positive dz_dt = descending (depth increases)

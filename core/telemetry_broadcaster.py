@@ -126,6 +126,9 @@ class TelemetryBroadcaster(QThread):
         self._pos_y: float = 0.0
         self._pos_dist: float = 0.0
 
+        # Trajectory heading (manually calibrated, plot convention: 0°=E, CCW+)
+        self._traj_heading: float = 0.0
+
         # QR
         self._qr_side: str = ""
         self._qr_valid: bool = False
@@ -257,6 +260,7 @@ class TelemetryBroadcaster(QThread):
                 "pos_x": self._pos_x,
                 "pos_y": self._pos_y,
                 "pos_dist": self._pos_dist,
+                "traj_heading": self._traj_heading,
             },
             "qr": {
                 "side": self._qr_side,
@@ -298,6 +302,17 @@ class TelemetryBroadcaster(QThread):
     @pyqtSlot(float)
     def on_simulated_depth(self, depth_m: float):
         self._depth_sim = depth_m
+
+    @pyqtSlot(float)
+    def on_traj_heading(self, heading_deg: float):
+        """Update trajectory heading from the trajectory panel.
+
+        Parameters
+        ----------
+        heading_deg : float
+            Manually-calibrated heading in plot convention (0°=East, CCW+).
+        """
+        self._traj_heading = heading_deg
 
     @pyqtSlot(float, float, float)
     def on_position(self, x: float, y: float, dist: float):

@@ -75,7 +75,7 @@ export default function SpectatorPage() {
 
           {/* Row 1, Col 1: Trajectory Map */}
           <TrajectoryPanel
-            heading={metrics.heading}
+            heading={metrics.traj_heading}
             posX={metrics.pos_x}
             posY={metrics.pos_y}
             posDist={metrics.pos_dist}

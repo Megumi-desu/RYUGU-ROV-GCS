@@ -13,7 +13,7 @@ export interface TelemetryMetrics {
   depth: number;
   depth_raw: number;
   altitude: number;
-  heading: number;
+  heading: number;       // raw IMU yaw (NED: 0°=North, CW+) — for attitude panel
   pitch: number;
   roll: number;
   yaw: number;
@@ -21,6 +21,7 @@ export interface TelemetryMetrics {
   pos_x: number;
   pos_y: number;
   pos_dist: number;
+  traj_heading: number;  // manually-calibrated trajectory heading (plot: 0°=East, CCW+)
 }
 
 export interface TelemetryQR {
@@ -55,6 +56,7 @@ const EMPTY_METRICS: TelemetryMetrics = {
   pos_x: 0,
   pos_y: 0,
   pos_dist: 0,
+  traj_heading: 0,
 };
 
 const EMPTY_QR: TelemetryQR = {

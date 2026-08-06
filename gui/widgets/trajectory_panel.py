@@ -60,6 +60,7 @@ class TrajectoryPanel(QFrame):
     mission_paused = pyqtSignal()
     mission_ended = pyqtSignal()
     position_changed = pyqtSignal(float, float, float)  # x, y, total_distance
+    heading_changed = pyqtSignal(float)                  # heading_deg
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -163,6 +164,7 @@ class TrajectoryPanel(QFrame):
             )
             self._setup_phase = _SetupPhase.RUNNING
             self.mission_started.emit()
+            self.heading_changed.emit(self._heading_deg)
 
     def _on_map_mouse_moved(self, pos: QPointF):
         if self._setup_phase == _SetupPhase.PICK_HEADING:
@@ -177,9 +179,11 @@ class TrajectoryPanel(QFrame):
             if self._heading_arrow is not None:
                 self._plot.removeItem(self._heading_arrow)
 
+            # Convert to pyqtgraph angle convention (0° = left/-X)
+            pg_angle = (180.0 - deg) % 360.0
             self._heading_arrow = pg.ArrowItem(
                 pos=(x, y),
-                angle=deg,
+                angle=pg_angle,
                 tipAngle=25,
                 headLen=14,
                 tailLen=0,
@@ -378,9 +382,12 @@ class TrajectoryPanel(QFrame):
         arrow_len = 0.4
         tip_x = self._rov_x + arrow_len * math.cos(rad)
         tip_y = self._rov_y + arrow_len * math.sin(rad)
+        # pyqtgraph ArrowItem uses angle 0° = left (-X), but our convention
+        # is 0° = right (+X, East).  Convert: pyqtgraph_angle = 180° - heading.
+        pg_angle = (180.0 - self._heading_deg) % 360.0
         self._rov_arrow = pg.ArrowItem(
             pos=(tip_x, tip_y),
-            angle=self._heading_deg,
+            angle=pg_angle,
             tipAngle=30,
             headLen=12,
             tailLen=0,
@@ -475,6 +482,7 @@ class TrajectoryPanel(QFrame):
             " border: none; color: #ffffff; background-color: #424242;"
         )
         self._update_coord_label()
+        self.heading_changed.emit(0.0)
 
     # ── Position update ───────────────────────────────────────────────────
 
@@ -547,6 +555,7 @@ class TrajectoryPanel(QFrame):
         self._heading_deg %= 360.0
         self._update_rov_arrow()
         self._update_coord_label()
+        self.heading_changed.emit(self._heading_deg)
 
     # ── Hybrid dead-reckoning helpers (PIXHAWK_HYBRID mode) ───────────────
 
@@ -603,6 +612,7 @@ class TrajectoryPanel(QFrame):
         self._heading_deg = (90.0 - imu_yaw_deg) % 360.0
         self._update_rov_arrow()
         self._update_coord_label()
+        self.heading_changed.emit(self._heading_deg)
 
     def _update_coord_label(self):
         self._coord_label.setText(
@@ -617,6 +627,10 @@ class TrajectoryPanel(QFrame):
         )
 
     # ── Utility ───────────────────────────────────────────────────────────
+
+    def get_heading(self) -> float:
+        """Return current heading in degrees (0°=East, CCW positive)."""
+        return self._heading_deg
 
     def clear_path(self):
         self._mission_active = False
@@ -651,3 +665,4 @@ class TrajectoryPanel(QFrame):
             " border: none; color: #ffffff; background-color: #424242;"
         )
         self._update_coord_label()
+        self.heading_changed.emit(0.0)

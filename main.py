@@ -174,6 +174,7 @@ def main():
 
     # ── Tap trajectory & QR → broadcaster ────────────────────────────
     window.traj_panel.position_changed.connect(broadcaster.on_position)
+    window.traj_panel.heading_changed.connect(broadcaster.on_traj_heading)
     window.qr_panel.qr_data_updated.connect(broadcaster.on_qr)
     window.qr_panel.qr_image_updated.connect(broadcaster.on_qr_image)
 
