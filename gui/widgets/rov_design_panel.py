@@ -37,9 +37,9 @@ class _ROVCanvas(QFrame):
         w, h = self.width(), self.height()
 
         if self._pix:
-            # Scale to fit, max 70% width, keep aspect ratio
+            # Scale to fit, max 85% width, keep aspect ratio
             pad = 10
-            max_w = int(w * 0.7)
+            max_w = int(w * 0.85)
             avail_w = w - pad * 2
             scaled = self._pix.scaled(
                 min(avail_w, max_w), h - pad * 2 - 4,
