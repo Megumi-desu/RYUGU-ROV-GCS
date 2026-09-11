@@ -82,6 +82,13 @@ class MainWindow(QMainWindow):
         self._imu_roll_deg: float = 0.0
         self._imu_yaw_deg: float = 0.0
 
+        # Yaw offset for trajectory map (PIXHAWK_HYBRID mode).
+        # Computed once at mission start (heading_setup_done signal):
+        #   _yaw_offset_deg = (gcs_initial_heading_plot - pixhawk_yaw_at_setup) % 360
+        # Thereafter: map_heading = (pixhawk_yaw + self._yaw_offset_deg) % 360
+        self._yaw_offset_deg: float = 0.0
+        self._offset_initialized: bool = False
+
         # Simulated depth (metres) — driven by hybrid DR or simple heave
         self._simulated_depth: float = 0.0
 
@@ -236,6 +243,11 @@ class MainWindow(QMainWindow):
         # Col 1: Trajectory Map
         self.traj_panel = TrajectoryPanel()
         grid.addWidget(self.traj_panel, 1, 1)
+        # Wire heading_setup_done → set_yaw_offset so that when the operator
+        # confirms the initial heading drag in PIXHAWK_HYBRID mode, the offset
+        # between GCS-virtual north and Pixhawk yaw is computed and locked.
+        self.traj_panel.heading_setup_done.connect(self.set_yaw_offset)
+        self.traj_panel.mission_reset.connect(self._on_mission_reset)
 
         # Col 2: ROV Design
         self.rov_panel = ROVDesignPanel()
@@ -349,53 +361,50 @@ class MainWindow(QMainWindow):
 
     def _update_hybrid_dr(self, surge: float, sway: float,
                           heave: float, yaw: float, dt: float):
-        """Compute world-frame displacement using manual heading + gamepad.
+        """Compute world-frame displacement using Pixhawk yaw + offset.
 
-        Decoupled from Pixhawk compass — heading comes from the trajectory
-        panel's manually-calibrated heading, updated by gamepad yaw stick.
-        Raw IMU pitch/roll/yaw are still used for the attitude panel and
-        depth coupling, but NOT for 2D trajectory dead reckoning.
+        Heading source:
+            map_heading = (self._yaw_offset_deg - self._imu_yaw_deg) % 360
+        where _yaw_offset_deg is locked when the operator confirms the START
+        heading in the trajectory setup workflow (set_yaw_offset()).
 
         Formulae:
+            map_heading_deg = (self._yaw_offset_deg - self._imu_yaw_deg) % 360
             world_dx = (V_surge·cosψ + V_sway·sinψ) · dt
             world_dy = (V_surge·sinψ - V_sway·cosψ) · dt
             dZ/dt    = (V_heave·cosθ·cosφ) - (V_surge·sinθ) + (V_sway·sinφ)
 
-        Where ψ = manually-calibrated trajectory heading (set via START
-        workflow), θ = pitch, φ = roll, and V_* are virtual velocities =
-        stick_norm × HYBRID_SPEED_*.
+        Where ψ is map_heading in radians, θ = IMU pitch, φ = IMU roll,
+        and V_* are calibrated velocities = stick_norm × HYBRID_SPEED_*.
         """
-        # IMU angles in radians (pitch/roll for depth coupling only)
+        # IMU angles in radians
         pitch_rad = math.radians(self._imu_pitch_deg)
         roll_rad  = math.radians(self._imu_roll_deg)
-        # Yaw: from trajectory panel's manually-calibrated heading
-        # (0°=East, CCW+), NOT from Pixhawk compass
-        traj_heading_deg = self.traj_panel.get_heading()
-        yaw_rad = math.radians(traj_heading_deg)
 
-        # Virtual body-frame velocities (m/s)
+        # ── Compute heading from Pixhawk yaw + operator-set offset ────
+        if self._offset_initialized:
+            map_heading_deg = (self._imu_yaw_deg + self._yaw_offset_deg) % 360.0
+        else:
+            map_heading_deg = self.traj_panel.get_heading()
+        yaw_rad = math.radians(map_heading_deg)
+
+        # Virtual body-frame velocities (m/s) from calibrated constants
         v_surge = surge * HYBRID_SPEED_SURGE
         v_sway  = sway  * HYBRID_SPEED_SWAY
         v_heave = heave * HYBRID_SPEED_HEAVE
 
-        # ── Update trajectory heading from gamepad yaw stick ──────────
-        # (replaces set_heading_absolute with IMU yaw)
-        if yaw != 0.0:
-            self.traj_panel.update_heading(yaw)
-
-        # ── Horizontal (X, Y) — rotate body velocities by manual heading ─
+        # ── Horizontal (X, Y) — body → world frame rotation ──────────
         world_dx = (v_surge * math.cos(yaw_rad) + v_sway * math.sin(yaw_rad)) * dt
         world_dy = (v_surge * math.sin(yaw_rad) - v_sway * math.cos(yaw_rad)) * dt
 
         self.traj_panel.update_position_hybrid(world_dx, world_dy)
 
-        # ── Vertical (Z) — depth with pitch/roll coupling ────────────
-        # Positive dz_dt = descending (depth increases)
-        # heave: positive = ascend in gamepad convention, so negate for depth
+        # ── Vertical (Z) — depth with pitch/roll coupling ─────────────
+        # heave positive = ascend (gamepad convention), so negate for depth
         dz_dt = (
             (-v_heave * math.cos(pitch_rad) * math.cos(roll_rad))
             - (v_surge * math.sin(pitch_rad))
-            + (v_sway * math.sin(roll_rad))
+            + (v_sway  * math.sin(roll_rad))
         )
         self._simulated_depth += dz_dt * dt
         self._simulated_depth = max(0.0, min(POOL_DEPTH_MAX, self._simulated_depth))
@@ -405,6 +414,40 @@ class MainWindow(QMainWindow):
         self._footer.set_bar30_status(
             True, f"{self._simulated_depth:.2f}m (Hybrid)"
         )
+
+    @pyqtSlot(float)
+    def set_yaw_offset(self, gcs_initial_heading_plot: float):
+        """Lock the Pixhawk yaw offset for this mission.
+
+        Called automatically when the operator confirms the START heading in
+        the trajectory setup workflow (connected to traj_panel.heading_setup_done).
+
+        Formula:
+            offset = (gcs_initial_heading_plot - imu_yaw_at_setup) % 360.0
+            map_heading = (imu_yaw + offset) % 360.0
+
+        This ensures:
+        - At setup: map_heading = (imu_yaw + gcs_initial - imu_yaw) = gcs_initial
+        - When ROV turns right: map_heading rotates right
+        - When ROV turns left: map_heading rotates left
+        """
+        self._yaw_offset_deg = (gcs_initial_heading_plot - self._imu_yaw_deg) % 360.0
+        self._offset_initialized = True
+        self.qr_panel.add_log(
+            f"YAW OFFSET SET: {self._yaw_offset_deg:.1f}° "
+            f"(GCS={gcs_initial_heading_plot:.1f}° "
+            f"IMU={self._imu_yaw_deg:.1f}°)",
+            "#00BCD4"
+        )
+        # Immediately push the initial offset heading to trajectory panel
+        map_heading_deg = (self._imu_yaw_deg + self._yaw_offset_deg) % 360.0
+        self.traj_panel.set_heading_absolute_offsetted(map_heading_deg)
+
+    @pyqtSlot()
+    def _on_mission_reset(self):
+        """Clear the yaw offset when trajectory is reset."""
+        self._offset_initialized = False
+        self._yaw_offset_deg = 0.0
 
     @pyqtSlot(bool)
     def on_arm_event(self, armed: bool):
@@ -522,6 +565,11 @@ class MainWindow(QMainWindow):
         self._footer.set_imu_status(
             True, f"P:{pitch:.0f}° R:{roll:.0f}° Y:{yaw:.0f}°"
         )
+
+        # In PIXHAWK_HYBRID mode, update trajectory map heading directly from IMU
+        if POSITION_MODE == "PIXHAWK_HYBRID" and self._offset_initialized:
+            map_heading_deg = (yaw + self._yaw_offset_deg) % 360.0
+            self.traj_panel.set_heading_absolute_offsetted(map_heading_deg)
 
     @pyqtSlot(dict)
     def _on_status_updated(self, status: dict):

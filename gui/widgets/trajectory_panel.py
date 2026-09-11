@@ -59,8 +59,13 @@ class TrajectoryPanel(QFrame):
     mission_started = pyqtSignal()
     mission_paused = pyqtSignal()
     mission_ended = pyqtSignal()
+    mission_reset = pyqtSignal()
     position_changed = pyqtSignal(float, float, float)  # x, y, total_distance
-    heading_changed = pyqtSignal(float)                  # heading_deg
+    heading_changed = pyqtSignal(float)                  # heading_deg (plot convention, live)
+    # Emitted once when setup completes: carries the initial GCS heading (plot
+    # convention, 0°=East CCW+) that the operator chose by dragging on the map.
+    # MainWindow uses this to compute the Pixhawk yaw offset.
+    heading_setup_done = pyqtSignal(float)               # initial_heading_deg
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -165,6 +170,10 @@ class TrajectoryPanel(QFrame):
             self._setup_phase = _SetupPhase.RUNNING
             self.mission_started.emit()
             self.heading_changed.emit(self._heading_deg)
+            # Notify MainWindow so it can lock the Pixhawk yaw offset for this
+            # mission.  Carrying the GCS plot-convention heading chosen by the
+            # operator (0°=East, CCW positive).
+            self.heading_setup_done.emit(self._heading_deg)
 
     def _on_map_mouse_moved(self, pos: QPointF):
         if self._setup_phase == _SetupPhase.PICK_HEADING:
@@ -483,6 +492,7 @@ class TrajectoryPanel(QFrame):
         )
         self._update_coord_label()
         self.heading_changed.emit(0.0)
+        self.mission_reset.emit()
 
     # ── Position update ───────────────────────────────────────────────────
 
@@ -610,6 +620,26 @@ class TrajectoryPanel(QFrame):
             return
         # NED → math/plot:  plot_heading = 90 - imu_yaw
         self._heading_deg = (90.0 - imu_yaw_deg) % 360.0
+        self._update_rov_arrow()
+        self._update_coord_label()
+        self.heading_changed.emit(self._heading_deg)
+
+    def set_heading_absolute_offsetted(self, map_heading_deg: float):
+        """Set heading from a pre-computed plot-convention heading.
+
+        Used by MainWindow._update_hybrid_dr() in PIXHAWK_HYBRID mode.
+        The caller has already applied the NED→plot conversion AND the
+        operator yaw offset, so we just store the value directly.
+
+        Parameters
+        ----------
+        map_heading_deg : float
+            Heading in plot convention (0°=East, CCW+) with operator
+            offset already applied.  Range [0, 360).
+        """
+        if self._rov_arrow is None:
+            return
+        self._heading_deg = map_heading_deg % 360.0
         self._update_rov_arrow()
         self._update_coord_label()
         self.heading_changed.emit(self._heading_deg)

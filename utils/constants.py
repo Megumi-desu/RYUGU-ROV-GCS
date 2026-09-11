@@ -72,10 +72,31 @@ SPEED_MULT_SLOW = 0.35       # 35% thrust — precision / inspection
 POSITION_MODE = "PIXHAWK_HYBRID"
 
 # ── Hybrid Dead Reckoning Tuning ─────────────────────────────────────
-# Virtual speed constants (metres per second at full stick deflection)
-HYBRID_SPEED_SURGE = 0.30   # forward/backward m/s at ±1000 stick
-HYBRID_SPEED_SWAY  = 0.25   # strafe m/s at ±1000 stick
-HYBRID_SPEED_HEAVE = 0.15   # ascend/descend m/s at ±1000 stick
+# Speed constants measured from physical pool trials (full stick = ±1000).
+# All values in metres per second (m/s).
+#
+# ┌─────────┬──────────────────────────────┬─────────────────────────────────────┐
+# │  Axis   │   3S Measured (11.1 V nom.)  │   4S Estimated (14.8 V nom., ×1.33) │
+# ├─────────┼──────────────────────────────┼─────────────────────────────────────┤
+# │  Surge  │  18 cm/s  →  0.180 m/s      │  ~0.240 m/s  (×14.8/11.1)          │
+# │  Sway   │  2 m / 16.25 s → 0.123 m/s  │  ~0.164 m/s                         │
+# │  Heave  │  1 m / 8.74 s  → 0.114 m/s  │  ~0.153 m/s                         │
+# └─────────┴──────────────────────────────┴─────────────────────────────────────┘
+#
+# NOTE: 4S estimates assume terminal speed ∝ voltage (V_4S/V_3S ≈ 1.333).
+# Actual 4S values MUST be verified with a real pool trial before competition.
+#
+# Change HYBRID_SPEED_* below to switch between 3S and 4S profiles.
+
+# ── Active profile: 3S (measured) ────────────────────────────────────
+HYBRID_SPEED_SURGE = 0.180   # m/s at ±1000 stick | 3S measured: 18.0 cm/s
+HYBRID_SPEED_SWAY  = 0.123   # m/s at ±1000 stick | 3S measured: 2 m / 16.25 s = 12.3 cm/s
+HYBRID_SPEED_HEAVE = 0.114   # m/s at ±1000 stick | 3S measured: 1 m / 8.74 s  = 11.4 cm/s
+
+# ── Estimated 4S profile (uncomment to use) ──────────────────────────
+# HYBRID_SPEED_SURGE = 0.240  # m/s | estimated 4S: 3S × (14.8/11.1)
+# HYBRID_SPEED_SWAY  = 0.164  # m/s | estimated 4S: 3S × (14.8/11.1)
+# HYBRID_SPEED_HEAVE = 0.153  # m/s | estimated 4S: 3S × (14.8/11.1)
 
 # ── Network (GCS ↔ Jetson Orin Nano) ─────────────────────────────────────
 GCS_IP      = "192.168.1.100"
@@ -85,8 +106,8 @@ CMD_PORT    = 5001    # UDP — uplink commands (GCS → Jetson)
 TELEM_PORT  = 5002    # UDP — downlink telemetry (Jetson → GCS)
 
 # ── Camera Streams ───────────────────────────────────────────────────────
-STREAM_URL_FRONT  = f"http://{JETSON_IP}:8554/video"
-STREAM_URL_BOTTOM = f"http://{JETSON_IP}:8555/video"
+STREAM_URL_FRONT  = f"http://{JETSON_IP}:8555/video"
+STREAM_URL_BOTTOM = f"http://{JETSON_IP}:8554/video"
 CAMERA_RECONNECT_S = 1.5  # seconds between reconnection attempts
 
 # ── MJPEG Spectator Server ─────────────────────────────────────────────
