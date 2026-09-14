@@ -1,5 +1,6 @@
 import math
 import os
+import re
 import time
 from datetime import datetime
 
@@ -29,10 +30,42 @@ from utils.constants import (
     SPEED_MULT_FAST, SPEED_MULT_SLOW,
     POSITION_MODE, POOL_DEPTH_MAX,
     HYBRID_SPEED_SURGE, HYBRID_SPEED_SWAY, HYBRID_SPEED_HEAVE,
+    CAM_ID_FRONT, CAM_ID_BOTTOM,
 )
 
 # Timeout threshold for downlink telemetry packets (seconds)
 _TELEM_TIMEOUT_S = 3.0
+
+
+def _parse_qr_side(raw_text: str) -> str | None:
+    """Extract ROV docking box side (A, B, C, D) from raw QR text.
+
+    Filters out garbage numbers and noise (e.g. from CLAHE edge cases).
+    Supports formats like:
+      - "A", "a", "B", "C", "D"
+      - "SISI-A", "SISI A", "sisi_a", "sisi a"
+      - "SIDE-A", "SIDE A", "side_a", "side a"
+
+    Returns
+    -------
+    str | None
+        Upper-case side letter ('A', 'B', 'C', or 'D'), or None if invalid.
+    """
+    if not raw_text:
+        return None
+    text = raw_text.strip()
+    if not text:
+        return None
+    # 1. Match explicit prefix (SISI or SIDE) followed by A, B, C, or D
+    m = re.search(r"(?:SISI|SIDE)[\s\-_:]*([ABCD])\b", text, re.IGNORECASE)
+    if m:
+        return m.group(1).upper()
+    # 2. Match isolated single letter A, B, C, or D
+    m = re.search(r"\b([ABCD])\b", text, re.IGNORECASE)
+    if m:
+        return m.group(1).upper()
+    return None
+
 
 
 def _load_qss(path: str) -> str:
@@ -249,8 +282,9 @@ class MainWindow(QMainWindow):
         self.traj_panel.heading_setup_done.connect(self.set_yaw_offset)
         self.traj_panel.mission_reset.connect(self._on_mission_reset)
 
-        # Col 2: ROV Design
+        # Col 2: ROV Design + Mission Progress
         self.rov_panel = ROVDesignPanel()
+        self.rov_panel.mission_changed.connect(self._on_mission_changed)
         grid.addWidget(self.rov_panel, 1, 2)
 
         # Cameras (col 0 & 1) wider than QR/ROV panels
@@ -500,6 +534,11 @@ class MainWindow(QMainWindow):
         if self._eth_worker is not None:
             self._eth_worker.send_mode(mode)
 
+    @pyqtSlot(int)
+    def _on_mission_changed(self, mission_idx: int):
+        """Log mission step changes to the status log."""
+        self.qr_panel.add_log(f"MISSION: M{mission_idx} ACTIVE", "#00BCD4")
+
     # ── Emergency Stop handler ────────────────────────────────────────
 
     def _on_emergency_stop(self):
@@ -553,7 +592,8 @@ class MainWindow(QMainWindow):
     @pyqtSlot(float, float, float)
     def _on_imu_updated(self, pitch: float, roll: float, yaw: float):
         """Handle IMU data from Ethernet — update panels + store for hybrid DR."""
-        self.rov_panel.update_state(f"P:{pitch:.0f}° R:{roll:.0f}° Y:{yaw:.0f}°")
+        # Update Attitude & Heading (artificial horizon + compass) in altitude panel
+        self.alt_panel.update_imu(pitch, roll, yaw)
 
         # Store orientation for hybrid dead-reckoning computation
         self._imu_pitch_deg = pitch
@@ -610,22 +650,26 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(int, str, bool, str)
     def _on_qr_detected(self, camera_id: int, zone: str, valid: bool, raw_text: str):
-        """Handle QR telemetry — update QR panel + capture frame if new.
+        """Handle QR telemetry — filter side and update QR panel + capture frame.
 
-        On each QR_RESULT (0x04) packet the raw decoded text is compared
-        against the previously seen value.  If it differs (or this is the
-        first detection), the latest video frame from the camera corresponding
-        to camera_id (0: front, 1: bottom) is grabbed and displayed on the QR panel.
+        If raw_text does not contain a valid side indicator (A/B/C/D), it is
+        treated as invalid noise (e.g. from CLAHE fallback) and ignored.
         """
-        # Always forward the parsed QR data to the panel
-        self.qr_panel.update_qr(zone, valid, raw_text)
+        parsed_side = _parse_qr_side(raw_text)
+        if parsed_side is None:
+            # Noise from CLAHE fallback or invalid scan — pass completely
+            return
+
+        # Forward the validated QR data to the panel
+        self.qr_panel.update_qr(parsed_side, True, raw_text)
 
         # Capture frame only when the QR text changes
         if raw_text != self._last_qr_text:
             self._last_qr_text = raw_text
 
-            # Select camera based on camera_id (0 = front cam, 1 = bottom cam)
-            if camera_id == 1:
+            # Select camera based on camera_id mapping from constants.py:
+            # CAM_ID_BOTTOM (1) -> Bottom Cam, CAM_ID_FRONT (0) -> Front Cam
+            if camera_id == CAM_ID_BOTTOM:
                 frame = self.cam_bottom.get_latest_frame()
                 if frame is None:
                     frame = self.cam_front.get_latest_frame()

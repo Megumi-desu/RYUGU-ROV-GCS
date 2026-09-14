@@ -7,6 +7,8 @@ from utils.constants import (
     POOL_DEPTH_MAX, DEPTH_WARN_M, DEPTH_CRIT_M,
     FONT_FAMILY
 )
+from gui.widgets.imu_indicator import IMUIndicatorWidget
+
 
 
 class AltitudePanel(QFrame):
@@ -67,7 +69,7 @@ class AltitudePanel(QFrame):
 
         center.addSpacing(8)
 
-        # ── RIGHT: Text labels stacked, centered vertically ────────────
+        # ── MIDDLE: Depth text labels stacked, centered vertically ─────
         right_widget = QWidget()
         right_widget.setStyleSheet("border: none; background: transparent;")
         right_layout = QVBoxLayout(right_widget)
@@ -102,8 +104,15 @@ class AltitudePanel(QFrame):
 
         center.addWidget(right_widget)
 
+        center.addSpacing(12)
+
+        # ── RIGHT: IMU Attitude + Heading indicator ────────────────────
+        self.imu_indicator = IMUIndicatorWidget()
+        center.addWidget(self.imu_indicator)
+
         root.addLayout(center)
         root.addStretch(1)
+
 
     @pyqtSlot(float)
     def update_depth(self, value: float) -> None:
@@ -120,3 +129,8 @@ class AltitudePanel(QFrame):
         else:
             self.lbl_zone.setText("ZONE: CRIT")
             self.lbl_zone.setStyleSheet("color: #F44336; font-weight: bold; border: none;")
+
+    @pyqtSlot(float, float, float)
+    def update_imu(self, pitch: float, roll: float, yaw: float) -> None:
+        """Update attitude & heading indicator."""
+        self.imu_indicator.update_imu(pitch, roll, yaw)

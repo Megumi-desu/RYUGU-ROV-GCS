@@ -54,6 +54,10 @@ POOL_SIZE_Y = 5.0   # meters
 # ── State Machine States ──────────────────────────────────────────────────
 SM_STATES = ["IDLE", "DIVING", "SCANNING", "GRIPPING", "DOCKING", "AUTONOMOUS"]
 
+# ── Mission Progress ──────────────────────────────────────────────────
+MISSION_LABELS = ["M1", "M2", "M3", "M4", "M5"]
+MISSION_COUNT  = 5
+
 # ── Flight Modes ─────────────────────────────────────────────────────────
 FLIGHT_MODES = ["MANUAL", "STABILIZE", "DEPTH HOLD", "AUTONOMOUS"]
 
@@ -109,6 +113,12 @@ TELEM_PORT  = 5002    # UDP — downlink telemetry (Jetson → GCS)
 STREAM_URL_FRONT  = f"http://{JETSON_IP}:8555/video"
 STREAM_URL_BOTTOM = f"http://{JETSON_IP}:8554/video"
 CAMERA_RECONNECT_S = 1.5  # seconds between reconnection attempts
+
+# ── Camera ID Mapping (matches camera_id in QR_RESULT 0x04 packet) ────────
+# Which camera_id from Jetson corresponds to FRONT and BOTTOM.
+# 0 = Front Cam, 1 = Bottom Cam (flip if Jetson camera indices are swapped)
+CAM_ID_FRONT  = 0
+CAM_ID_BOTTOM = 1
 
 # ── MJPEG Spectator Server ─────────────────────────────────────────────
 MJPEG_PORT         = 8080   # HTTP server for web spectator video streams

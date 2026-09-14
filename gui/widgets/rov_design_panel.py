@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QFrame, QLabel, QVBoxLayout, QSizePolicy
-from PyQt5.QtCore import Qt, QRect, QPoint
+from PyQt5.QtCore import Qt, QRect, QPoint, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import (
     QPainter, QColor, QPen, QPixmap, QFont,
     QBrush, QPolygon
@@ -10,6 +10,7 @@ from utils.constants import (
     COLOR_TEXT_DIM, FONT_FAMILY,
     ASSET_ROV_IMG
 )
+from gui.widgets.mission_panel import MissionProgressPanel
 
 
 class _ROVCanvas(QFrame):
@@ -139,7 +140,10 @@ class _ROVCanvas(QFrame):
 
 
 class ROVDesignPanel(QFrame):
-    """Displays ROV photo with axis indicator and mission state badge."""
+    """Displays ROV photo with axis indicator and mission progress panel."""
+
+    # Forwarded from embedded MissionProgressPanel
+    mission_changed = pyqtSignal(int)   # 1-based mission index
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -156,7 +160,7 @@ class ROVDesignPanel(QFrame):
         """)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 16)
+        layout.setContentsMargins(0, 0, 0, 8)
         layout.setSpacing(0)
 
         title = QLabel("  ROV DESIGN")
@@ -164,17 +168,34 @@ class ROVDesignPanel(QFrame):
         title.setFixedHeight(26)
         layout.addWidget(title)
 
+        # ROV canvas — takes remaining vertical space
         self._canvas = _ROVCanvas()
         layout.addWidget(self._canvas, stretch=1)
 
-        self._state_badge = QLabel("STATE: IDLE")
-        self._state_badge.setObjectName("stateBadge")
-        self._state_badge.setAlignment(Qt.AlignCenter)
-        self._state_badge.setStyleSheet(
-            f"color: {COLOR_TEXT_DIM}; border: none;"
-        )
-        self._state_badge.setFont(QFont(FONT_FAMILY, 10))
-        layout.addWidget(self._state_badge)
+        # Mission progress panel — compact strip at the bottom
+        self._mission_panel = MissionProgressPanel()
+        self._mission_panel.mission_changed.connect(self.mission_changed)
+        layout.addWidget(self._mission_panel)
+
+    # ── Public API ────────────────────────────────────────────────────
+
+    @pyqtSlot(int)
+    def advance_mission(self, delta: int):
+        """Forward D-Pad mission step to the embedded mission panel.
+
+        Parameters
+        ----------
+        delta : int
+            ``+1`` to advance, ``-1`` to go back.
+        """
+        self._mission_panel.advance(delta)
+
+    @property
+    def current_mission(self) -> int:
+        """Current active mission index (1-based)."""
+        return self._mission_panel.current_mission
 
     def update_state(self, state: str):
-        self._state_badge.setText(f"STATE: {state}")
+        """Compatibility method for legacy callers."""
+        pass
+

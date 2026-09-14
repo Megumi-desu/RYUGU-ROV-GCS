@@ -248,6 +248,7 @@ class GamepadController(QThread):
     mode_changed = pyqtSignal(str)
     arm_event = pyqtSignal(bool)
     position_delta = pyqtSignal(float, float)
+    mission_step = pyqtSignal(int)
     connection_lost = pyqtSignal()
     connection_restored = pyqtSignal()
 
@@ -276,8 +277,7 @@ class GamepadController(QThread):
         self._hold_start = _HoldDetector(self.HOLD_SECONDS)
         self._hold_back = _HoldDetector(self.HOLD_SECONDS)
 
-        # D-Pad ramp accumulators for pitch and roll
-        self._pitch_accum = _DPadAccumulator()
+        # D-Pad ramp accumulator for roll (pitch unused per thruster config)
         self._roll_accum = _DPadAccumulator()
 
         # Trigger-based gripper edge detection
@@ -360,8 +360,8 @@ class GamepadController(QThread):
         # Reset accumulators and hold detectors
         self._hold_start.reset()
         self._hold_back.reset()
-        self._pitch_accum.reset()
         self._roll_accum.reset()
+        self._prev_hat = (0, 0)
         self._prev_lt_pressed = False
         self._prev_rt_pressed = False
 
@@ -389,17 +389,22 @@ class GamepadController(QThread):
         heave_norm = deadzone_rescale(-ry, self.STICK_DEADZONE)   # invert Y, ascend = positive
         yaw_norm   = deadzone_rescale(rx, self.STICK_DEADZONE)
 
-        # ── D-Pad → Pitch & Roll via ramp accumulator ─────────────────────
+        # ── D-Pad: UP/DOWN for Mission Step, LEFT/RIGHT for Roll ─────────
         hat = (
             self._joystick.get_hat(0)
             if self._joystick.get_numhats() > 0
             else (0, 0)
         )
 
-        # Pitch: D-Pad UP (+1) = pitch forward, DOWN (-1) = pitch backward
-        pitch_int = self._pitch_accum.update(hat[1])
+        # Mission step (edge detection on hat Y: UP=+1, DOWN=-1)
+        if hat[1] == 1 and self._prev_hat[1] != 1:
+            self.mission_step.emit(1)
+        elif hat[1] == -1 and self._prev_hat[1] != -1:
+            self.mission_step.emit(-1)
+
         # Roll: D-Pad RIGHT (+1) = roll right, LEFT (-1) = roll left
         roll_int = self._roll_accum.update(hat[0])
+        self._prev_hat = hat
 
         # ── Emit axes as ints (-1000 .. +1000) ─────────────────────────────
         axes = {
@@ -407,7 +412,7 @@ class GamepadController(QThread):
             "sway":  self._to_thousand(sway_norm),
             "heave": self._to_thousand(heave_norm),
             "yaw":   self._to_thousand(yaw_norm),
-            "pitch": int(max(-DPAD_MAX_VALUE, min(DPAD_MAX_VALUE, pitch_int))),
+            "pitch": 0,
             "roll":  int(max(-DPAD_MAX_VALUE, min(DPAD_MAX_VALUE, roll_int))),
         }
         self.axes_updated.emit(axes)

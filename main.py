@@ -150,6 +150,9 @@ def main():
     # Button events (gripper, speed mode) → forward to MainWindow
     gamepad.button_event.connect(window.on_button_event)
 
+    # Mission progress (D-Pad UP/DOWN) → forward to ROV Design Mission Panel
+    gamepad.mission_step.connect(window.rov_panel.advance_mission)
+
     # Connection status → GAMEPAD indicator + status log
     def _on_gamepad_lost():
         window._footer.set_gamepad_status(False, "LOST")
