@@ -105,17 +105,30 @@ class CameraStreamWorker(QThread):
                     logger.warning("%s: frame read failed, reconnecting", self._label)
                     break
 
+                # ── RECORDING LOGIC ──
                 if self._record_path is not None:
                     if self._writer is None:
-                        height, width = frame.shape[:2]
-                        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-                        self._writer = cv2.VideoWriter(
-                            self._record_path, fourcc, 20.0, (width, height)
-                        )
-                    self._writer.write(frame)
-                elif self._writer is not None:
-                    self._writer.release()
-                    self._writer = None
+                        # Inisialisasi video dengan 10 FPS
+                        h, w = frame.shape[:2]
+                        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                        self._writer = cv2.VideoWriter(self._record_path, fourcc, 10.0, (w, h))
+                        # Catat waktu persis saat frame pertama mulai direkam
+                        self._record_start_time = time.time()
+                        self._written_frames = 0
+
+                    # Hitung jumlah frame yang SEHARUSNYA sudah ditulis berdasarkan jam asli
+                    elapsed = time.time() - self._record_start_time
+                    expected_frames = int(elapsed * 10.0)
+
+                    # Tulis frame sebanyak selisihnya (Otomatis duplikasi jika lag, skip jika terlalu cepat)
+                    while self._written_frames < expected_frames:
+                        self._writer.write(frame)
+                        self._written_frames += 1
+                else:
+                    if self._writer is not None:
+                        self._writer.release()
+                        self._writer = None
+                        logger.info(f"{self._label}: Recording saved.")
 
                 # Convert BGR → RGB and build QImage
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)

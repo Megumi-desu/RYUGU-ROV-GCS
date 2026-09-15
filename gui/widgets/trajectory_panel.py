@@ -1,5 +1,6 @@
 import math
 import datetime
+import time
 import os
 from enum import IntEnum
 
@@ -526,22 +527,30 @@ class TrajectoryPanel(QFrame):
             self._traj_writer = None
 
     def _record_frame(self):
-        qimg = self.grab().toImage().convertToFormat(QImage.Format_RGB888)
-        width, height = qimg.width(), qimg.height()
-        pointer = qimg.constBits()
-        pointer.setsize(height * width * 3)
-        frame = np.array(pointer).reshape(height, width, 3)
-        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        """Mengambil screenshot dari TrajectoryPanel dan menyimpannya ke video (Real-Time Synced)."""
+        qimg = self.grab().toImage().convertToFormat(QImage.Format_RGBA8888)
+        w, h = qimg.width(), qimg.height()
+        
+        ptr = qimg.constBits()
+        ptr.setsize(h * w * 4)
+        arr = np.array(ptr).reshape(h, w, 4)
+        bgr = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR)
 
         if self._traj_writer is None:
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-            self._traj_writer = cv2.VideoWriter(
-                self._traj_record_path, fourcc, 10.0, (width, height)
-            )
-        self._traj_writer.write(frame)
-
-    # ── Position update ───────────────────────────────────────────────────
-
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            self._traj_writer = cv2.VideoWriter(self._traj_record_path, fourcc, 10.0, (w, h))
+            # Catat waktu persis saat frame pertama mulai direkam
+            self._traj_start_time = time.time()
+            self._traj_written_frames = 0
+        
+        # Sinkronisasi durasi dengan waktu dunia nyata
+        elapsed = time.time() - self._traj_start_time
+        expected = int(elapsed * 10.0)
+        
+        while self._traj_written_frames < expected:
+            self._traj_writer.write(bgr)
+            self._traj_written_frames += 1
+            
     @pyqtSlot(float, float)
     def update_position(self, dx: float, dy: float):
         """Update ROV position using open-loop dead reckoning.
