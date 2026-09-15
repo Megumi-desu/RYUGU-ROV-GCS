@@ -412,7 +412,7 @@ class MainWindow(QMainWindow):
 
         # ── Compute heading from Pixhawk yaw + operator-set offset ────
         if self._offset_initialized:
-            map_heading_deg = (self._imu_yaw_deg + self._yaw_offset_deg) % 360.0
+            map_heading_deg = (self._yaw_offset_deg - self._imu_yaw_deg) % 360.0
         else:
             map_heading_deg = self.traj_panel.get_heading()
         yaw_rad = math.radians(map_heading_deg)
@@ -599,8 +599,9 @@ class MainWindow(QMainWindow):
             True, f"P:{pitch:.0f}° R:{roll:.0f}° Y:{yaw:.0f}°"
         )
 
-        # In PIXHAWK_HYBRID mode, update trajectory map heading directly from IMU
-        if POSITION_MODE == "PIXHAWK_HYBRID" and self._offset_initialized:
+        # Once the operator has set the mission heading, keep the trajectory
+        # arrow synchronized with IMU yaw independently of motion input mode.
+        if self._offset_initialized:
             map_heading_deg = (yaw + self._yaw_offset_deg) % 360.0
             self.traj_panel.set_heading_absolute_offsetted(map_heading_deg)
 

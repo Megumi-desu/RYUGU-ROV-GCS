@@ -203,7 +203,11 @@ class TrajectoryPanel(QFrame):
             if self._heading_arrow is not None:
                 self._plot.removeItem(self._heading_arrow)
 
-            # Convert to pyqtgraph angle convention (0° = left/-X)
+            # pyqtgraph ArrowItem: angle 0° = left (-X), 90° = up (+Y),
+            # 180° = right (+X), 270° = down (-Y).
+            # Our plot convention: 0° = right (+X, East), 90° = up (+Y, North),
+            # increasing counter-clockwise.
+            # Convert: pg_angle = (180 - deg) % 360
             pg_angle = (180.0 - deg) % 360.0
             self._heading_arrow = pg.ArrowItem(
                 pos=(x, y),
@@ -406,8 +410,11 @@ class TrajectoryPanel(QFrame):
         arrow_len = 0.4
         tip_x = self._rov_x + arrow_len * math.cos(rad)
         tip_y = self._rov_y + arrow_len * math.sin(rad)
-        # pyqtgraph ArrowItem uses angle 0° = left (-X), but our convention
-        # is 0° = right (+X, East).  Convert: pyqtgraph_angle = 180° - heading.
+        # pyqtgraph ArrowItem: angle 0° = left (-X), 90° = up (+Y),
+        # 180° = right (+X), 270° = down (-Y).
+        # Our plot convention: 0° = right (+X, East), 90° = up (+Y, North),
+        # increasing counter-clockwise.
+        # Convert: pg_angle = (180 - heading) % 360
         pg_angle = (180.0 - self._heading_deg) % 360.0
         self._rov_arrow = pg.ArrowItem(
             pos=(tip_x, tip_y),
@@ -480,6 +487,7 @@ class TrajectoryPanel(QFrame):
         self._mission_active = False
         self._mission_locked = False
         self._setup_phase = _SetupPhase.IDLE
+        self.mission_reset.emit()
         self._heading_deg = 0.0
         self._total_distance = 0.0
 
@@ -531,7 +539,6 @@ class TrajectoryPanel(QFrame):
                 self._traj_record_path, fourcc, 10.0, (width, height)
             )
         self._traj_writer.write(frame)
-        self.mission_reset.emit()
 
     # ── Position update ───────────────────────────────────────────────────
 
@@ -676,8 +683,6 @@ class TrajectoryPanel(QFrame):
             Heading in plot convention (0°=East, CCW+) with operator
             offset already applied.  Range [0, 360).
         """
-        if self._rov_arrow is None:
-            return
         self._heading_deg = map_heading_deg % 360.0
         self._update_rov_arrow()
         self._update_coord_label()

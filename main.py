@@ -135,8 +135,10 @@ def main():
     )
 
     # ── Wire gamepad → MainWindow ─────────────────────────────────────
-    # Position delta → Trajectory Panel (dead reckoning)
-    gamepad.position_delta.connect(window.traj_panel.update_position)
+    # Hybrid mode integrates position from calibrated speeds + IMU yaw in
+    # MainWindow, so the direct gamepad delta is used only in legacy mode.
+    if POSITION_MODE != "PIXHAWK_HYBRID":
+        gamepad.position_delta.connect(window.traj_panel.update_position)
 
     # Axes → MainWindow handler (yaw → trajectory heading + forward to Jetson)
     gamepad.axes_updated.connect(window.on_axes_updated)
