@@ -181,6 +181,20 @@ def main():
     window.qr_panel.qr_data_updated.connect(broadcaster.on_qr)
     window.qr_panel.qr_image_updated.connect(broadcaster.on_qr_image)
 
+    def _start_camera_recording(folder_path):
+        import os
+        cam_front.start_recording(os.path.join(folder_path, "Front_Camera.mp4"))
+        cam_bottom.start_recording(os.path.join(folder_path, "Bottom_Camera.mp4"))
+
+    def _stop_camera_recording():
+        cam_front.stop_recording()
+        cam_bottom.stop_recording()
+
+    window.traj_panel.recording_started.connect(_start_camera_recording)
+    window.traj_panel.mission_ended.connect(_stop_camera_recording)
+    window.traj_panel.mission_paused.connect(_stop_camera_recording)
+    window.traj_panel.mission_reset.connect(_stop_camera_recording)
+
     # ── Wire camera streams → camera panels ───────────────────────────
     cam_front.frame_ready.connect(window.cam_front.update_frame_qimage)
     cam_front.connection_status.connect(window.cam_front.set_stream_status)

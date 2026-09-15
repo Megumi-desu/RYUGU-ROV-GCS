@@ -1,3 +1,5 @@
+import math
+
 from PyQt5.QtWidgets import QFrame, QLabel, QVBoxLayout, QSizePolicy
 from PyQt5.QtCore import Qt, QRect, QPoint, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import (
@@ -26,11 +28,20 @@ class _ROVCanvas(QFrame):
         self.setMinimumHeight(120)
         self.setStyleSheet("background: transparent; border: none;")
         self._load_image()
+        self._pitch = 0.0
+        self._roll = 0.0
+        self._yaw = 0.0
 
     def _load_image(self):
         pix = QPixmap(ASSET_ROV_IMG)
         if not pix.isNull():
             self._pix = pix
+
+    def set_orientation(self, pitch: float, roll: float, yaw: float):
+        self._pitch = pitch
+        self._roll = roll
+        self._yaw = yaw
+        self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -94,21 +105,36 @@ class _ROVCanvas(QFrame):
           Y (green)= lateral  → lower-right
           Z (blue) = up       → straight up
         """
-        ox  = int(w * 0.08)
-        oy  = h - int(h * 0.18)
-        L          = 34
+        ox = int(w * 0.16)
+        oy = h - int(h * 0.26)
+        axis_length = 36.0
         arrow_size = 7
+        pitch = math.radians(self._pitch)
+        roll = math.radians(self._roll)
+        yaw = math.radians(self._yaw)
+        cos_pitch, sin_pitch = math.cos(pitch), math.sin(pitch)
+        cos_roll, sin_roll = math.cos(roll), math.sin(roll)
+        cos_yaw, sin_yaw = math.cos(yaw), math.sin(yaw)
+        iso_pitch = math.radians(25)
+        iso_yaw = math.radians(45)
+        axes = {
+            "X": (1.0, 0.0, 0.0, QColor(COLOR_ACCENT)),
+            "Y": (0.0, 1.0, 0.0, QColor("#4caf50")),
+            "Z": (0.0, 0.0, -1.0, QColor("#2196f3")),
+        }
 
-        axes = [
-            # X forward: projected upper-right at 30° above horizontal
-            ("X",  int(L * 0.87), -int(L * 0.5),  QColor(COLOR_ACCENT)),
-            # Y lateral: projected lower-right at 30° below horizontal
-            ("Y",  int(L * 0.87),  int(L * 0.5),  QColor("#4caf50")),
-            # Z up: straight up
-            ("Z",  0,             -L,             QColor("#2196f3")),
-        ]
-
-        for label, dx, dy, color in axes:
+        for label, (body_x, body_y, body_z, color) in axes.items():
+            rotated_x = body_x * cos_pitch + body_z * sin_pitch
+            rotated_y = body_y
+            rotated_z = -body_x * sin_pitch + body_z * cos_pitch
+            rolled_x = rotated_x
+            rolled_y = rotated_y * cos_roll - rotated_z * sin_roll
+            rolled_z = rotated_y * sin_roll + rotated_z * cos_roll
+            world_x = rolled_x * cos_yaw - rolled_y * sin_yaw
+            world_y = rolled_x * sin_yaw + rolled_y * cos_yaw
+            world_z = rolled_z
+            dx = int((world_x * math.cos(iso_yaw) - world_y * math.sin(iso_yaw)) * axis_length)
+            dy = int((-(world_x * math.sin(iso_yaw) + world_y * math.cos(iso_yaw)) * math.sin(iso_pitch) - world_z * math.cos(iso_pitch)) * axis_length)
             # Axis line
             pen = QPen(color, 2, Qt.SolidLine, Qt.RoundCap)
             painter.setPen(pen)
@@ -116,8 +142,8 @@ class _ROVCanvas(QFrame):
 
             # Arrowhead
             tip_x, tip_y = ox + dx, oy + dy
-            norm = (dx**2 + dy**2) ** 0.5
-            if norm > 0:
+            norm = math.hypot(dx, dy)
+            if norm > 3:
                 ux, uy = dx / norm, dy / norm
                 px, py = -uy, ux
                 pts = QPolygon([
@@ -178,6 +204,10 @@ class ROVDesignPanel(QFrame):
         layout.addWidget(self._mission_panel)
 
     # ── Public API ────────────────────────────────────────────────────
+
+    @pyqtSlot(float, float, float)
+    def update_imu(self, pitch: float, roll: float, yaw: float):
+        self._canvas.set_orientation(pitch, roll, yaw)
 
     @pyqtSlot(int)
     def advance_mission(self, delta: int):

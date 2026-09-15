@@ -26,7 +26,7 @@ def _make_sep() -> QLabel:
 
 class FooterStatusBar(QWidget):
     """
-    Custom status bar: Mode | Connection | BAR30 | BATT | GAMEPAD | IMU | Logging
+    Custom status bar: Mode | Connection | BATT | GAMEPAD | IMU | Logging
     Each section has a colored LED indicator + text label.
     """
 
@@ -62,8 +62,6 @@ class FooterStatusBar(QWidget):
         self._led_mode, self._lbl_mode = _item("ledNeutral", "MODE: MANUAL")
         # Connection
         self._led_conn, self._lbl_conn = _item("ledError", "CONNECTION: OFFLINE")
-        # BAR30 (Depth/Pressure)
-        self._led_bar30, self._lbl_bar30 = _item("ledNeutral", "BAR30: OFFLINE")
         # BATT (Battery)
         self._led_batt, self._lbl_batt = _item("ledNeutral", "BATT: OFFLINE")
         # GAMEPAD (Logitech F310)
@@ -76,7 +74,6 @@ class FooterStatusBar(QWidget):
         sections = [
             (self._led_mode, self._lbl_mode),
             (self._led_conn, self._lbl_conn),
-            (self._led_bar30, self._lbl_bar30),
             (self._led_batt, self._lbl_batt),
             (self._led_gamepad, self._lbl_gamepad),
             (self._led_imu, self._lbl_imu),
@@ -108,11 +105,6 @@ class FooterStatusBar(QWidget):
         self._lbl_conn.setText("CONNECTION: ONLINE" if connected else "CONNECTION: OFFLINE")
         self._set_led(self._led_conn, COLOR_OK if connected else COLOR_ERROR)
 
-    def set_bar30_status(self, ok: bool, detail: str = ""):
-        """Update BAR30 depth/pressure sensor indicator."""
-        text = f"BAR30: {detail}" if detail else ("BAR30: OK" if ok else "BAR30: OFFLINE")
-        self._lbl_bar30.setText(text)
-        self._set_led(self._led_bar30, COLOR_OK if ok else COLOR_ERROR)
 
     def set_battery_status(self, ok: bool, detail: str = ""):
         """Update battery status indicator."""

@@ -1,11 +1,14 @@
 import math
+import datetime
+import os
 from enum import IntEnum
 
+import cv2
 import numpy as np
 import pyqtgraph as pg
 from PyQt5.QtWidgets import QFrame, QLabel, QVBoxLayout, QHBoxLayout, QPushButton
-from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal, QPointF
-from PyQt5.QtGui import QFont
+from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal, QPointF, QTimer
+from PyQt5.QtGui import QFont, QImage
 
 from utils.constants import (
     COLOR_PANEL, COLOR_BORDER, COLOR_ACCENT,
@@ -66,6 +69,7 @@ class TrajectoryPanel(QFrame):
     # convention, 0°=East CCW+) that the operator chose by dragging on the map.
     # MainWindow uses this to compute the Pixhawk yaw offset.
     heading_setup_done = pyqtSignal(float)               # initial_heading_deg
+    recording_started = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -92,6 +96,10 @@ class TrajectoryPanel(QFrame):
         self._heading_arrow = None
         self._rov_arrow = None
         self._preview_dot = None
+        self._record_timer = QTimer()
+        self._record_timer.timeout.connect(self._record_frame)
+        self._traj_writer = None
+        self._traj_record_path = ""
 
         self._setup_ui()
         self._connect_mouse_events()
@@ -174,6 +182,13 @@ class TrajectoryPanel(QFrame):
             # mission.  Carrying the GCS plot-convention heading chosen by the
             # operator (0°=East, CCW positive).
             self.heading_setup_done.emit(self._heading_deg)
+
+            now_str = datetime.datetime.now().strftime("%d-%b-%Y_%H-%M-%S")
+            folder_path = os.path.join(os.getcwd(), "recordings", f"Misi_{now_str}")
+            os.makedirs(folder_path, exist_ok=True)
+            self._traj_record_path = os.path.join(folder_path, "Trajectory_Record.mp4")
+            self._record_timer.start(100)
+            self.recording_started.emit(folder_path)
 
     def _on_map_mouse_moved(self, pos: QPointF):
         if self._setup_phase == _SetupPhase.PICK_HEADING:
@@ -432,6 +447,7 @@ class TrajectoryPanel(QFrame):
         self._setup_phase = _SetupPhase.PICK_ORIGIN
 
     def _on_pause(self):
+        self._stop_recording()
         self._mission_active = False
         self._pause_btn.setEnabled(False)
         self._pause_btn.setStyleSheet(
@@ -442,6 +458,7 @@ class TrajectoryPanel(QFrame):
         self.mission_paused.emit()
 
     def _on_end(self):
+        self._stop_recording()
         self._mission_active = False
         self._mission_locked = True
         self._start_btn.setEnabled(False)
@@ -459,6 +476,7 @@ class TrajectoryPanel(QFrame):
         self.mission_ended.emit()
 
     def _on_reset(self):
+        self._stop_recording()
         self._mission_active = False
         self._mission_locked = False
         self._setup_phase = _SetupPhase.IDLE
@@ -492,6 +510,27 @@ class TrajectoryPanel(QFrame):
         )
         self._update_coord_label()
         self.heading_changed.emit(0.0)
+
+    def _stop_recording(self):
+        self._record_timer.stop()
+        if self._traj_writer is not None:
+            self._traj_writer.release()
+            self._traj_writer = None
+
+    def _record_frame(self):
+        qimg = self.grab().toImage().convertToFormat(QImage.Format_RGB888)
+        width, height = qimg.width(), qimg.height()
+        pointer = qimg.constBits()
+        pointer.setsize(height * width * 3)
+        frame = np.array(pointer).reshape(height, width, 3)
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+        if self._traj_writer is None:
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            self._traj_writer = cv2.VideoWriter(
+                self._traj_record_path, fourcc, 10.0, (width, height)
+            )
+        self._traj_writer.write(frame)
         self.mission_reset.emit()
 
     # ── Position update ───────────────────────────────────────────────────

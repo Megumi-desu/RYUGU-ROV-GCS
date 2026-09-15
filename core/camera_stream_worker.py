@@ -65,6 +65,14 @@ class CameraStreamWorker(QThread):
         self._label = label
         self._running = False
         self._cap: cv2.VideoCapture | None = None
+        self._record_path: str | None = None
+        self._writer: cv2.VideoWriter | None = None
+
+    def start_recording(self, filepath: str):
+        self._record_path = filepath
+
+    def stop_recording(self):
+        self._record_path = None
 
     # ── Lifecycle ───────────────────────────────────────────────────────
 
@@ -97,6 +105,18 @@ class CameraStreamWorker(QThread):
                     logger.warning("%s: frame read failed, reconnecting", self._label)
                     break
 
+                if self._record_path is not None:
+                    if self._writer is None:
+                        height, width = frame.shape[:2]
+                        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+                        self._writer = cv2.VideoWriter(
+                            self._record_path, fourcc, 20.0, (width, height)
+                        )
+                    self._writer.write(frame)
+                elif self._writer is not None:
+                    self._writer.release()
+                    self._writer = None
+
                 # Convert BGR → RGB and build QImage
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 h, w, ch = rgb.shape
@@ -119,6 +139,9 @@ class CameraStreamWorker(QThread):
                 self._interruptible_sleep(CAMERA_RECONNECT_S)
 
         # Final cleanup
+        if self._writer is not None:
+            self._writer.release()
+            self._writer = None
         if self._cap is not None:
             self._cap.release()
             self._cap = None
@@ -127,6 +150,7 @@ class CameraStreamWorker(QThread):
     def stop(self):
         """Request the worker to stop.  Non-blocking; call wait() after."""
         self._running = False
+        self.stop_recording()
         self.quit()
         self.wait(3000)
 

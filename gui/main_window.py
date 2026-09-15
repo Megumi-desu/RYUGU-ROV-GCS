@@ -173,7 +173,6 @@ class MainWindow(QMainWindow):
         # Initial status
         self._footer.set_mode("MANUAL")
         self._footer.set_connection(False)
-        self._footer.set_bar30_status(False, "NO LINK")
         self._footer.set_battery_status(False, "NO LINK")
         self._footer.set_gamepad_status(False, "NO LINK")
         self._footer.set_imu_status(False, "NO LINK")
@@ -201,7 +200,6 @@ class MainWindow(QMainWindow):
         self._logo_team = QLabel()
         self._logo_team.setFixedSize(44, 44)
         self._logo_team.setStyleSheet("border: none;")
-        self._load_logo(self._logo_team, ASSET_LOGO_TEAM, 44)
         layout.addWidget(self._logo_team)
 
         layout.addSpacing(8)
@@ -218,7 +216,6 @@ class MainWindow(QMainWindow):
 
         lbl_uni = QLabel(UNIVERSITY_NAME)
         lbl_uni.setObjectName("topBarUniversity")
-        lbl_uni.setFont(QFont(FONT_FAMILY, 13))
         layout.addWidget(lbl_uni)
 
         sep2 = QLabel("  |  ")
@@ -329,7 +326,6 @@ class MainWindow(QMainWindow):
             self._last_imu_time = 0.0   # avoid repeated updates
 
         if self._last_depth_time and (mono - self._last_depth_time) > _TELEM_TIMEOUT_S:
-            self._footer.set_bar30_status(False, "OFFLINE")
             self._last_depth_time = 0.0
 
         if self._last_status_time and (mono - self._last_status_time) > _TELEM_TIMEOUT_S:
@@ -371,7 +367,7 @@ class MainWindow(QMainWindow):
                 self.traj_panel.update_heading(yaw_norm)
 
             # Dummy Depth / Altitude Simulation from Right Stick Y (heave_norm)
-            # When live Bar30 telemetry is offline, right stick Y updates dummy altitude.
+            # When live depth telemetry is offline, right stick Y updates dummy altitude.
             if time.monotonic() - self._last_depth_time > 2.0:
                 v_heave = heave_norm * HYBRID_SPEED_HEAVE
                 dz_dt = -v_heave  # Right stick DOWN (heave_norm < 0) -> depth increases
@@ -380,7 +376,6 @@ class MainWindow(QMainWindow):
                     self._simulated_depth = max(0.0, min(POOL_DEPTH_MAX, self._simulated_depth))
                     self.simulated_depth_changed.emit(self._simulated_depth)
                     self.alt_panel.update_depth(self._simulated_depth)
-                    self._footer.set_bar30_status(True, f"{self._simulated_depth:.2f}m (Sim)")
 
         # ── Scale primary motion axes by speed multiplier ─────────────
         scaled_axes = dict(axes)  # shallow copy
@@ -445,9 +440,6 @@ class MainWindow(QMainWindow):
         self.simulated_depth_changed.emit(self._simulated_depth)
 
         self.alt_panel.update_depth(self._simulated_depth)
-        self._footer.set_bar30_status(
-            True, f"{self._simulated_depth:.2f}m (Hybrid)"
-        )
 
     @pyqtSlot(float)
     def set_yaw_offset(self, gcs_initial_heading_plot: float):
@@ -594,6 +586,7 @@ class MainWindow(QMainWindow):
         """Handle IMU data from Ethernet — update panels + store for hybrid DR."""
         # Update Attitude & Heading (artificial horizon + compass) in altitude panel
         self.alt_panel.update_imu(pitch, roll, yaw)
+        self.rov_panel.update_imu(pitch, roll, yaw)
 
         # Store orientation for hybrid dead-reckoning computation
         self._imu_pitch_deg = pitch
@@ -635,7 +628,7 @@ class MainWindow(QMainWindow):
     # ── Depth packet handler (called via wire_ethernet lambda) ────────
 
     def _on_depth_updated(self, depth: float, alt: float):
-        """Handle depth telemetry — update altitude panel + BAR30 indicator.
+        """Handle depth telemetry and update the altitude panel.
 
         When POSITION_MODE is PIXHAWK_HYBRID, depth is computed from
         gamepad + IMU, so real depth packets are ignored.
@@ -644,7 +637,6 @@ class MainWindow(QMainWindow):
             return   # depth driven by hybrid DR, not telemetry
         self.alt_panel.update_depth(depth)
         self._last_depth_time = time.monotonic()
-        self._footer.set_bar30_status(True, f"{depth:.2f}m")
 
     # ── QR local frame capture ───────────────────────────────────────
 
