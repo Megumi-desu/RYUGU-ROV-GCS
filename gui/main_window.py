@@ -412,15 +412,15 @@ class MainWindow(QMainWindow):
 
         # ── Compute heading from Pixhawk yaw + operator-set offset ────
         if self._offset_initialized:
-            map_heading_deg = (self._yaw_offset_deg - self._imu_yaw_deg) % 360.0
+            map_heading_deg = self._map_heading_from_imu(self._imu_yaw_deg)
         else:
             map_heading_deg = self.traj_panel.get_heading()
         yaw_rad = math.radians(map_heading_deg)
 
         # Virtual body-frame velocities (m/s) from calibrated constants
-        v_surge = surge * HYBRID_SPEED_SURGE
-        v_sway  = sway  * HYBRID_SPEED_SWAY
-        v_heave = heave * HYBRID_SPEED_HEAVE
+        v_surge = surge * HYBRID_SPEED_SURGE * self._speed_multiplier
+        v_sway  = sway * HYBRID_SPEED_SWAY * self._speed_multiplier
+        v_heave = heave * HYBRID_SPEED_HEAVE * self._speed_multiplier
 
         # ── Horizontal (X, Y) — body → world frame rotation ──────────
         world_dx = (v_surge * math.cos(yaw_rad) + v_sway * math.sin(yaw_rad)) * dt
@@ -449,15 +449,17 @@ class MainWindow(QMainWindow):
         the trajectory setup workflow (connected to traj_panel.heading_setup_done).
 
         Formula:
-            offset = (gcs_initial_heading_plot - imu_yaw_at_setup) % 360.0
-            map_heading = (imu_yaw + offset) % 360.0
+            offset = (gcs_initial_heading_plot + imu_yaw_at_setup) % 360.0
+            map_heading = (offset - imu_yaw) % 360.0
 
         This ensures:
-        - At setup: map_heading = (imu_yaw + gcs_initial - imu_yaw) = gcs_initial
-        - When ROV turns right: map_heading rotates right
-        - When ROV turns left: map_heading rotates left
+                - At setup: map_heading = gcs_initial_heading_plot
+                - When IMU yaw increases (clockwise), map heading decreases
+                    consistently with the plot convention.
         """
-        self._yaw_offset_deg = (gcs_initial_heading_plot - self._imu_yaw_deg) % 360.0
+        self._yaw_offset_deg = (
+            gcs_initial_heading_plot + self._imu_yaw_deg
+        ) % 360.0
         self._offset_initialized = True
         self.qr_panel.add_log(
             f"YAW OFFSET SET: {self._yaw_offset_deg:.1f}° "
@@ -466,7 +468,7 @@ class MainWindow(QMainWindow):
             "#00BCD4"
         )
         # Immediately push the initial offset heading to trajectory panel
-        map_heading_deg = (self._imu_yaw_deg + self._yaw_offset_deg) % 360.0
+        map_heading_deg = self._map_heading_from_imu(self._imu_yaw_deg)
         self.traj_panel.set_heading_absolute_offsetted(map_heading_deg)
 
     @pyqtSlot()
@@ -602,8 +604,12 @@ class MainWindow(QMainWindow):
         # Once the operator has set the mission heading, keep the trajectory
         # arrow synchronized with IMU yaw independently of motion input mode.
         if self._offset_initialized:
-            map_heading_deg = (yaw + self._yaw_offset_deg) % 360.0
+            map_heading_deg = self._map_heading_from_imu(self._imu_yaw_deg)
             self.traj_panel.set_heading_absolute_offsetted(map_heading_deg)
+
+    def _map_heading_from_imu(self, imu_yaw_deg: float) -> float:
+        """Convert Pixhawk NED yaw to the trajectory plot convention."""
+        return (self._yaw_offset_deg - imu_yaw_deg) % 360.0
 
     @pyqtSlot(dict)
     def _on_status_updated(self, status: dict):

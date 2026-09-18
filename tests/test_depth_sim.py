@@ -38,3 +38,18 @@ def test_right_stick_dummy_depth(qapp):
         window.on_axes_updated(axes_up)
 
     assert window._simulated_depth < current_depth
+
+
+def test_hybrid_surge_follows_map_heading(qapp):
+    window = MainWindow()
+    window._imu_yaw_deg = 30.0
+    window.set_yaw_offset(90.0)
+    window.traj_panel._mission_active = True
+
+    start_x = window.traj_panel._rov_x
+    start_y = window.traj_panel._rov_y
+    window._update_hybrid_dr(1.0, 0.0, 0.0, 0.0, 1.0)
+
+    assert window._map_heading_from_imu(30.0) == pytest.approx(90.0)
+    assert window.traj_panel._rov_x == pytest.approx(start_x, abs=1e-6)
+    assert window.traj_panel._rov_y > start_y
